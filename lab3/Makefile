@@ -1,6 +1,6 @@
 CXX = g++
 OPENCV_PKG_CONFIG := $(shell pkg-config --cflags --libs opencv4)
-CXXFLAGS = -Werror -Wall -Wpedantic -O0 -std=c++17
+CXXFLAGS = -Werror -Wall -Wpedantic -O0 -std=c++17 -g
 
 TARGET = edge_detector
 SRCS = edge_detector.cpp processing.cpp

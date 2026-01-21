@@ -12,7 +12,17 @@
 #define _PROCESSING_HPP
 
 //- #defines go here
-//- function prototypes go here
-cv::Mat example_function(cv::Mat frame);
+
+/*-----------------------------------------------------
+* Function: to442_grayscale
+*
+* Description: Converts image to grayscale using the BT.709 algorithm
+* Gray = 0.0722B + 0.7152G + 0.2126R
+*
+* param frame: cv::Mat
+*
+* return: cv::Mat
+*--------------------------------------------------------*/ 
+cv::Mat to442_grayscale(cv::Mat frame);
 
 #endif //- _PROCESSING_HPP
