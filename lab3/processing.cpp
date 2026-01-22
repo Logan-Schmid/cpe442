@@ -68,7 +68,12 @@ Mat to442_sobel(Mat frame) {
                     G_y_sum += static_cast<int16_t>(G_y[i+1][j+1]*frame.at<uchar>(row+i, col+j));
                 }
             }
-            sobel_frame.at<uchar>(row-1, col-1) = static_cast<uint8_t>(abs(G_x_sum) + abs(G_y_sum));
+            //TODO: add a ternary operator that checks >255 when casting down. static_casting to uint8_t just discards the upper 8 bits of the uint16_t
+            uint16_t G = abs(G_x_sum) + abs(G_y_sum);
+            if (G > 255) {
+                G = 255;
+            }
+            sobel_frame.at<uchar>(row-1, col-1) = static_cast<uint8_t>(G);
         }
     }
     return sobel_frame;
