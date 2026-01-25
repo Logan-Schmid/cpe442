@@ -68,7 +68,6 @@ Mat to442_sobel(Mat frame) {
                     G_y_sum += static_cast<int16_t>(G_y[i+1][j+1]*frame.at<uchar>(row+i, col+j));
                 }
             }
-            //TODO: add a ternary operator that checks >255 when casting down. static_casting to uint8_t just discards the upper 8 bits of the uint16_t
             uint16_t G = abs(G_x_sum) + abs(G_y_sum);
             if (G > 255) {
                 G = 255;
@@ -79,6 +78,15 @@ Mat to442_sobel(Mat frame) {
     return sobel_frame;
 }
 
+/*-----------------------------------------------------
+* Function: builtin_sobel
+*
+* Description: Applies a Sobel filter to an image using openCV's Sobel filter. Used for validation of to442_sobel.
+*
+* param frame: cv::Mat: the input grayscale image
+*
+* return: cv::Mat
+*--------------------------------------------------------*/ 
 Mat builtin_sobel(Mat frame) {
     Mat grad_x, grad_y;
     Mat abs_grad_x, abs_grad_y, grad;

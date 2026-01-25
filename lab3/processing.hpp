@@ -35,6 +35,7 @@
 *--------------------------------------------------------*/ 
 cv::Mat to442_grayscale(cv::Mat frame);
 
+
 /*-----------------------------------------------------
 * Function: to442_sobel
 *
@@ -46,6 +47,16 @@ cv::Mat to442_grayscale(cv::Mat frame);
 *--------------------------------------------------------*/ 
 cv::Mat to442_sobel(cv::Mat frame);
 
+
+/*-----------------------------------------------------
+* Function: builtin_sobel
+*
+* Description: Applies a Sobel filter to an image using openCV's Sobel filter. Used for validation of to442_sobel.
+*
+* param frame: cv::Mat: the input grayscale image
+*
+* return: cv::Mat
+*--------------------------------------------------------*/ 
 cv::Mat builtin_sobel(cv::Mat frame);
 
 #endif //- _PROCESSING_HPP
