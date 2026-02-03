@@ -25,6 +25,16 @@ pthread_barrier_t barrier;
 void *thread_statuses[NUM_THREADS];
 bool keep_working = true;
 
+/*-----------------------------------------------------
+* Function: process_quadrant
+*
+* Description: Used with a child thread to grayscale and then 
+* apply a Sobel filter to an image quadrant
+*
+* param threadArgs: void*: pointer to the struct with args for the worker
+*
+* return: void*
+*--------------------------------------------------------*/ 
 void* process_quadrant(void* threadArgs) {
     threadArgs_t* args = static_cast<threadArgs_t*>(threadArgs);
 
@@ -86,6 +96,7 @@ int main(int argc, char** argv) {
     threadArgs_t thread_args[] = {top_left_args, top_right_args, bot_left_args, bot_right_args};
     int pthread_create_ret_vals[NUM_THREADS];
 
+    // start each child thread and check creation return values
     for (int i = 0; i < NUM_THREADS; i++) {
         pthread_create_ret_vals[i] = pthread_create(&threads[i], NULL, process_quadrant, (void*)&thread_args[i]);
         if (pthread_create_ret_vals[i] != 0) {
@@ -94,7 +105,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Read, save, and display each frame of the video
+    // Read and display each frame of the video
     for (int i = 0; i < frame_count; i++) {
         bool ret = cap.read(frame);
         if (!ret) {
@@ -111,11 +122,9 @@ int main(int argc, char** argv) {
         pthread_barrier_wait(&barrier);
         
         // Display the frame
-        // imshow("Display Window", frame_gray);
         imshow("Display Window", frame_sobel);
 
         // Wait for appropriate time between frames and check if 'q' is pressed to exit
-        // char key = waitKey(1000/fps);
         char key = waitKey(1);
         if (key == 'q') {
             break;
@@ -123,6 +132,7 @@ int main(int argc, char** argv) {
     }
 
     // Stop all worker threads once all frames have been processed
+    // Need three pthread_barrier_waits due to the same number in process_quadrant
     keep_working = false;
     pthread_barrier_wait(&barrier);
     pthread_barrier_wait(&barrier);

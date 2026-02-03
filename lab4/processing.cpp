@@ -21,7 +21,12 @@ using namespace std;
 * Description: Converts image to grayscale using the BT.709 algorithm
 * Gray = 0.0722B + 0.7152G + 0.2126R
 *
-* param threadArgs: *void: RGB frame with border information
+* param src: Mat*: the input color image
+* param dst: Mat*: the output grayscale image
+* param r0: int: the starting row index
+* param c0: int: the starting column index
+* param h: int: the height of the processing region
+* param w: int: the width of the processing region
 *
 * return: void
 *--------------------------------------------------------*/ 
@@ -40,7 +45,12 @@ using namespace std;
 *
 * Description: Applies a Sobel filter to an image using a manual implementation
 *
-* param threadArgs: *void: grayscaled frame with border information
+* param src: Mat*: the input grayscale image
+* param dst: Mat*: the output edge-detected image
+* param r0: int: the starting row index
+* param c0: int: the starting column index
+* param h: int: the height of the processing region
+* param w: int: the width of the processing region
 *
 * return: void
 *--------------------------------------------------------*/

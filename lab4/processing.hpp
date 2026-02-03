@@ -42,7 +42,12 @@ typedef struct {
 * Description: Converts image to grayscale using the BT.709 algorithm
 * Gray = 0.0722B + 0.7152G + 0.2126R
 *
-* param frame: cv::Mat: the input color image
+* param src: Mat*: the input color image
+* param dst: Mat*: the output grayscale image
+* param r0: int: the starting row index
+* param c0: int: the starting column index
+* param h: int: the height of the processing region
+* param w: int: the width of the processing region
 *
 * return: void
 *--------------------------------------------------------*/ 
@@ -54,7 +59,12 @@ void to442_grayscale(Mat* src, Mat* dst, int r0, int c0, int h, int w);
 *
 * Description: Applies a Sobel filter to an image using a manual implementation
 *
-* param frame: cv::Mat: the input grayscale image
+* param src: Mat*: the input grayscale image
+* param dst: Mat*: the output edge-detected image
+* param r0: int: the starting row index
+* param c0: int: the starting column index
+* param h: int: the height of the processing region
+* param w: int: the width of the processing region
 *
 * return: void
 *--------------------------------------------------------*/ 
