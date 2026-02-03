@@ -1,8 +1,7 @@
 /*******************************************************
-* File: threaded_processing.cpp
+* File: processing.cpp
 *
-* Description: Functions for processing video, now using
-* threads for increased speed
+* Description: Functions for processing video
 *
 * Author: Logan Schmid, Enrique Murillo
 *
@@ -11,46 +10,46 @@
 ********************************************************/
 // #include <cmath>
 #include <opencv2/opencv.hpp>
-#include "threaded_processing.hpp"
+#include "processing.hpp"
 
 using namespace cv;
 using namespace std;
 
 /*-----------------------------------------------------
-* Function: to442_grayscale
+* Function: to442_grayscale_worker
 *
 * Description: Converts image to grayscale using the BT.709 algorithm
 * Gray = 0.0722B + 0.7152G + 0.2126R
 *
-* param frame: Mat
+* param threadArgs: *void: RGB frame with border information
 *
-* return: Mat
+* return: void *
 *--------------------------------------------------------*/ 
- Mat to442_grayscale(Mat frame) {
-    int num_rows = frame.rows;
-    int num_cols = frame.cols;
+ void* to442_grayscale_worker(void *threadArgs) {
+    threadArgs_t* args = static_cast<threadArgs_t*>(threadArgs);
     
-    Mat frame_gray(num_rows, num_cols, CV_8UC1, Scalar(0));
-    for (int row = 0; row < num_rows; row++) {
-        for (int col = 0; col < num_cols; col++) {
-            Vec3b &pix = frame.at<Vec3b>(row,col);
+    const Mat& src = *args->src;
+    Mat& dst = *args->dst;
+    for (int row = args->row_0; row < args->row_0 + args->h; row++) {
+        for (int col = args->col_0; col < args->col_0 + args->w; col++) {
+            const Vec3b &pix = src.at<Vec3b>(row,col);
             uchar gray = static_cast<uchar>(0.0722*pix[0] + 0.7152*pix[1] + 0.2126*pix[2]);
-            frame_gray.at<uchar>(row,col) = gray;
+            dst.at<uchar>(row,col) = gray;
         }
     }
-    return frame_gray;
+    return nullptr;
 }
 
 /*-----------------------------------------------------
-* Function: to442_sobel
+* Function: to442_sobel_worker
 *
 * Description: Applies a Sobel filter to an image using a manual implementation
 *
-* param frame: Mat: the input grayscale image
+* param threadArgs: *void: grayscaled frame with border information
 *
-* return: Mat
+* return: void *
 *--------------------------------------------------------*/
-Mat to442_sobel(Mat frame) {
+void* to442_sobel_worker(void* threadArgs) {
     int G_x[3][3] = GX;
     int G_y[3][3] = GY;
     int num_rows = frame.rows;
@@ -76,32 +75,5 @@ Mat to442_sobel(Mat frame) {
             sobel_frame.at<uchar>(row-1, col-1) = static_cast<uint8_t>(G);
         }
     }
-    return sobel_frame;
-}
-
-/*-----------------------------------------------------
-* Function: builtin_sobel
-*
-* Description: Applies a Sobel filter to an image using openCV's Sobel filter. Used for validation of to442_sobel.
-*
-* param frame: cv::Mat: the input grayscale image
-*
-* return: cv::Mat
-*--------------------------------------------------------*/ 
-Mat builtin_sobel(Mat frame) {
-    Mat grad_x, grad_y;
-    Mat abs_grad_x, abs_grad_y, grad;
-
-    // Use 16-bit signed to avoid overflow
-    Sobel(frame, grad_x, CV_16S, 1, 0, 3);
-    Sobel(frame, grad_y, CV_16S, 0, 1, 3);  // [web:2][web:6]
-
-    convertScaleAbs(grad_x, abs_grad_x);
-    convertScaleAbs(grad_y, abs_grad_y);
-
-    // Combine X and Y gradients
-    addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);  // [web:2]
-
-    cout << "The depth of grad from cv sobel fxn is: " << grad.depth() << endl;
-    return grad;
+    return nullptr;
 }

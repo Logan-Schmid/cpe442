@@ -1,10 +1,10 @@
 CXX = g++
 OPENCV_PKG_CONFIG := $(shell pkg-config --cflags --libs opencv4)
-CXXFLAGS = -Werror -Wall -Wpedantic -O0 -std=c++17 -g
+CXXFLAGS = -Werror -Wall -Wpedantic -O0 -std=c++17 -g -lpthread
 
 TARGET = edge_detector_threads
-SRCS = edge_detector_threads.cpp threaded_processing.cpp
-INCLS = threaded_processing.hpp
+SRCS = edge_detector_threads.cpp processing.cpp
+INCLS = processing.hpp
 OBJS = $(SRCS:.cpp=.o)
 
 $(TARGET): $(OBJS)
