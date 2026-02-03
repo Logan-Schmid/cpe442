@@ -26,16 +26,18 @@ using namespace cv;
 }
 
 typedef struct {
-    const Mat* src;
-    Mat* dst;
+    Mat* src;
+    Mat* gray;
+    Mat* sobel;
     int row_0;
     int col_0;
     int h;
     int w;
+    int thread_id;
 } threadArgs_t;
 
 /*-----------------------------------------------------
-* Function: to442_grayscale_worker
+* Function: to442_grayscale
 *
 * Description: Converts image to grayscale using the BT.709 algorithm
 * Gray = 0.0722B + 0.7152G + 0.2126R
@@ -44,11 +46,11 @@ typedef struct {
 *
 * return: void
 *--------------------------------------------------------*/ 
-void* to442_grayscale_worker(void* threadArgs);
+void to442_grayscale(Mat* src, Mat* dst, int r0, int c0, int h, int w);
 
 
 /*-----------------------------------------------------
-* Function: to442_sobel_worker
+* Function: to442_sobel
 *
 * Description: Applies a Sobel filter to an image using a manual implementation
 *
@@ -56,7 +58,7 @@ void* to442_grayscale_worker(void* threadArgs);
 *
 * return: void
 *--------------------------------------------------------*/ 
-void* to442_sobel_worker(void* threadArgs);
+void to442_sobel(Mat* src, Mat* dst, int r0, int c0, int h, int w);
 
 
 #endif //- _PROCESSING_HPP
