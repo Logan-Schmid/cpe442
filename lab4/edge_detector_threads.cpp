@@ -12,6 +12,7 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <pthread.h>
+#include <chrono>
 #include "processing.hpp"
 
 #define NUM_THREADS 4
@@ -49,6 +50,8 @@ void* process_quadrant(void* threadArgs) {
 }
 
 int main(int argc, char** argv) {
+    auto start = chrono::high_resolution_clock::now(); // start timer for runtime
+
     if (argc != 2) {
         cerr << "Incorrect usage - use via: 'edge_detector [video_path]'" << endl;
         return -1;
@@ -84,16 +87,15 @@ int main(int argc, char** argv) {
     pthread_barrier_init(&barrier, NULL, NUM_THREADS+1);
 
     // calc quadrant dims, assuming even dims
-    int sub_h = height / 2;
-    int sub_w = width / 2;
+    int sub_h = height / 4;
     
     // set threadArgs for each quadrant
-    threadArgs_t top_left_args = {&frame, &frame_gray, &frame_sobel, 0, 0, sub_h+1, sub_w+1, 0};
-    threadArgs_t top_right_args = {&frame, &frame_gray, &frame_sobel, 0, sub_w-1, sub_h+1, sub_w, 1};
-    threadArgs_t bot_left_args = {&frame, &frame_gray, &frame_sobel, sub_h-1, 0, sub_h, sub_w+1, 2};
-    threadArgs_t bot_right_args = {&frame, &frame_gray, &frame_sobel, sub_h-1, sub_w-1, sub_h, sub_w, 3};
+    threadArgs_t row_0_args = {&frame, &frame_gray, &frame_sobel, 0,         0, sub_h+2, width, 0};
+    threadArgs_t row_1_args = {&frame, &frame_gray, &frame_sobel, sub_h-1,   0, sub_h+2, width, 1};
+    threadArgs_t row_2_args = {&frame, &frame_gray, &frame_sobel, 2*sub_h-1, 0, sub_h+2, width, 2};
+    threadArgs_t row_3_args = {&frame, &frame_gray, &frame_sobel, 3*sub_h-1, 0, sub_h+1, width, 3};
 
-    threadArgs_t thread_args[] = {top_left_args, top_right_args, bot_left_args, bot_right_args};
+    threadArgs_t thread_args[] = {row_0_args, row_1_args, row_2_args, row_3_args};
     int pthread_create_ret_vals[NUM_THREADS];
 
     // start each child thread and check creation return values
@@ -147,5 +149,11 @@ int main(int argc, char** argv) {
     // Release the video capture object and close any OpenCV windows
     cap.release();
     destroyAllWindows();
+
+    // calculate and print the runtime
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    cout << "Program Runtime: " << (float)duration.count()/1000 << " seconds\n";  // e.g., 150000 us [web:2]
+
     return 0;
 }
