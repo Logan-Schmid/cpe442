@@ -57,30 +57,36 @@ using namespace std;
 void to442_sobel(Mat* src, Mat* dst, int r0, int c0, int h, int w) {
     int16_t G_x[3][3] = GX;
     int16_t G_y[3][3] = GY;
-    uint8x8_t pixs;
-    int16x8_t pixs_intermed;
     uint8_t* rowPtr;
     // loop through all pixels except the outermost pixel border
     for (int row = r0+1; row < r0+h-1; row++) {
         for (int col = c0+1; col < c0+w-1; col += 8) {
             // For each pixel, convolute the 3x3 matrices GX and GY
-            int16x8_t G_x_sum = 0;
-            int16x8_t G_y_sum = 0;
+            int16x8_t G_x_sum = vdupq_n_s16(0);
+            int16x8_t G_y_sum = vdupq_n_s16(0);
             for (int i = -1; i <= 1; i++) {
+                rowPtr = (*src).ptr<uint8_t>(row+i);
                 for (int j =-1; j <= 1; j++) {
-                    rowPtr = (*src).ptr<uint8_t>(row+i);
-                    pixs = vld1_u8(rowPtr+col+j);
-                    pixs_intermed = vmovl_
+                    uint8x8_t pixs = vld1_u8(rowPtr+col+j);
+                    uint16x8_t pixs_intermed_u = vmovl_u8(pixs);
+                    int16x8_t pixs_intermed_s = vreinterpretq_s16_u16(pixs_intermed_u);
+
+                    int16x8_t conv_prod_x = vmulq_n_s16(pixs_intermed_s, G_x_sum[i+1][j+1]);
+                    int16x8_t conv_prod_y = vmulq_n_s16(pixs_intermed_s, G_y_sum[i+1][j+1]);
                     
-                    // G_x_sum += static_cast<int16_t>(G_x[i+1][j+1]*(*src).at<uchar>(row+i, col+j));
-                    // G_y_sum += static_cast<int16_t>(G_y[i+1][j+1]*(*src).at<uchar>(row+i, col+j));
+                    G_x_sum = vaddq_s16(G_x_sum, conv_prod_x);
+                    G_y_sum = vaddq_s16(G_y_sum, conv_prod_y);
                 }
             }
-            uint16_t G = abs(G_x_sum) + abs(G_y_sum);
-            if (G > 255) {
-                G = 255;
-            }
-            (*dst).at<uchar>(row-1, col-1) = static_cast<uint8_t>(G);
+            int16x8_t G_x_sum_abs = vabsq_s16(G_x_sum);
+            int16x8_t G_y_sum_abs = vabsq_s16(G_y_sum);
+
+            int16x8_t G_16 = vaddq_s16(G_x_sum_abs, G_y_sum_abs);
+            
+            uint8x8_t G_8 = vqmovun_s16(G_16);
+
+            uint8_t* rowPtr_dst = (*dst).ptr<uint8_t>(row-1);
+            vst1_u8(G_8, rowPtr_dst+col-1);
         }
     }
 }
