@@ -9,6 +9,7 @@
 *
 ********************************************************/
 #include <opencv2/opencv.hpp>
+#include <arm_neon.h>
 #include "processing.hpp"
 
 using namespace cv;
@@ -54,18 +55,25 @@ using namespace std;
 * return: void
 *--------------------------------------------------------*/
 void to442_sobel(Mat* src, Mat* dst, int r0, int c0, int h, int w) {
-    int G_x[3][3] = GX;
-    int G_y[3][3] = GY;
+    int16_t G_x[3][3] = GX;
+    int16_t G_y[3][3] = GY;
+    uint8x8_t pixs;
+    int16x8_t pixs_intermed;
+    uint8_t* rowPtr;
     // loop through all pixels except the outermost pixel border
     for (int row = r0+1; row < r0+h-1; row++) {
-        for (int col = c0+1; col < c0+w-1; col++) {
+        for (int col = c0+1; col < c0+w-1; col += 8) {
             // For each pixel, convolute the 3x3 matrices GX and GY
-            int16_t G_x_sum = 0;
-            int16_t G_y_sum = 0;
+            int16x8_t G_x_sum = 0;
+            int16x8_t G_y_sum = 0;
             for (int i = -1; i <= 1; i++) {
                 for (int j =-1; j <= 1; j++) {
-                    G_x_sum += static_cast<int16_t>(G_x[i+1][j+1]*(*src).at<uchar>(row+i, col+j));
-                    G_y_sum += static_cast<int16_t>(G_y[i+1][j+1]*(*src).at<uchar>(row+i, col+j));
+                    rowPtr = (*src).ptr<uint8_t>(row+i);
+                    pixs = vld1_u8(rowPtr+col+j);
+                    pixs_intermed = vmovl_
+                    
+                    // G_x_sum += static_cast<int16_t>(G_x[i+1][j+1]*(*src).at<uchar>(row+i, col+j));
+                    // G_y_sum += static_cast<int16_t>(G_y[i+1][j+1]*(*src).at<uchar>(row+i, col+j));
                 }
             }
             uint16_t G = abs(G_x_sum) + abs(G_y_sum);
