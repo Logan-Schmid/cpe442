@@ -71,4 +71,4 @@ void to442_grayscale(Mat* src, Mat* dst, int r0, int c0, int h, int w);
 void to442_sobel(Mat* src, Mat* dst, int r0, int c0, int h, int w);
 
 
-#endif //- _PROCESSING_HPP
+#endif // _PROCESSING_HPP
