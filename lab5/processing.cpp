@@ -11,7 +11,6 @@
 #include <opencv2/opencv.hpp>
 #include <arm_neon.h>
 #include "processing.hpp"
-#inlcude <arm_noen.h>
 #include <cstdio>
 #include <cstdint>
 
@@ -133,8 +132,8 @@ void to442_sobel(Mat* src, Mat* dst, int r0, int c0, int h, int w) {
                     uint16x8_t pixs_intermed_u = vmovl_u8(pixs);
                     int16x8_t pixs_intermed_s = vreinterpretq_s16_u16(pixs_intermed_u);
 
-                    int16x8_t conv_prod_x = vmulq_n_s16(pixs_intermed_s, G_x_sum[i+1][j+1]);
-                    int16x8_t conv_prod_y = vmulq_n_s16(pixs_intermed_s, G_y_sum[i+1][j+1]);
+                    int16x8_t conv_prod_x = vmulq_n_s16(pixs_intermed_s, G_x[i+1][j+1]);
+                    int16x8_t conv_prod_y = vmulq_n_s16(pixs_intermed_s, G_y[i+1][j+1]);
                     
                     G_x_sum = vaddq_s16(G_x_sum, conv_prod_x);
                     G_y_sum = vaddq_s16(G_y_sum, conv_prod_y);
@@ -148,7 +147,7 @@ void to442_sobel(Mat* src, Mat* dst, int r0, int c0, int h, int w) {
             uint8x8_t G_8 = vqmovun_s16(G_16);
 
             uint8_t* rowPtr_dst = (*dst).ptr<uint8_t>(row-1);
-            vst1_u8(G_8, rowPtr_dst+col-1);
+            vst1_u8(rowPtr_dst+col-1, G_8);
         }
     }
 }

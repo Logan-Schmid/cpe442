@@ -149,7 +149,10 @@ int main(int argc, char** argv) {
 
     // Release the video capture object and close any OpenCV windows
     cap.release();
-    destroyAllWindows();
+    if (getWindowProperty("Display Window", WND_PROP_VISIBLE) >= 0) {
+	destroyWindow("Display Window");
+    }
+    // destoryAllWindows();
 
     // calculate and print the runtime
     auto stop = std::chrono::high_resolution_clock::now();
