@@ -121,7 +121,7 @@ void to442_sobel(Mat* src, Mat* dst, int r0, int c0, int h, int w) {
     uint8_t* rowPtr;
     // loop through all pixels except the outermost pixel border
     for (int row = r0+1; row < r0+h-1; row++) {
-        for (int col = c0+1; col < c0+w-1; col += 8) {
+        for (int col = c0+1; col <= c0+w-9; col += 8) {
             // For each pixel, convolute the 3x3 matrices GX and GY
             int16x8_t G_x_sum = vdupq_n_s16(0);
             int16x8_t G_y_sum = vdupq_n_s16(0);
