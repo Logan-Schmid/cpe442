@@ -14,7 +14,7 @@ $(OBJS): $(SRCS) $(INCLS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@ $(OPENCV_PKG_CONFIG)
 
 asm:
-	$(CXX) $(CXXFLAGS) processing.cpp -S processing.s $(OPENCV_PKG_CONFIG)
+	$(CXX) $(CXXFLAGS) -S processing.cpp -o processing.s $(OPENCV_PKG_CONFIG)
 
 clean:
 	rm -f $(OBJS) $(TARGET) *.s
