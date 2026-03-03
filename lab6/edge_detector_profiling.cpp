@@ -215,10 +215,6 @@ int main(int argc, char** argv) {
 
     // Release the video capture object and close any OpenCV windows
     cap.release();
-    // if (getWindowProperty("Display Window", WND_PROP_VISIBLE) >= 0) {
-	//     // destroyWindow("Display Window");
-	//     destroyAllWindows();
-    // }
     destroyAllWindows();
     waitKey(1);
 
@@ -226,8 +222,6 @@ int main(int argc, char** argv) {
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     float duration_secs = (float)duration.count()/1000;
-    cout << "Program Runtime: " << duration_secs << " seconds\n";  // e.g., 150000 us [web:2]
-    cout << "Average FPS: " << frame_count / duration_secs << endl;
     
     long long all_cores_caches_misses_total = 0;
     long long all_cores_cycles_total = 0;
@@ -246,6 +240,8 @@ int main(int argc, char** argv) {
     
     cout << "Avg Total Cache Misses Per Core Per Frame: " << (double)all_cores_caches_misses_total / (NUM_THREADS*frame_count) << endl;
     cout << "Avg Cycles Per Core Per Frame: " << (double)all_cores_cycles_total / (NUM_THREADS*frame_count) << endl;
-
+    cout << "Program Runtime: " << duration_secs << " seconds\n";  // e.g., 150000 us [web:2]
+    cout << "Average FPS: " << frame_count / duration_secs << endl;
+    
     return 0;
 }
