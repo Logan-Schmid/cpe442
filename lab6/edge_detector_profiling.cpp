@@ -104,7 +104,7 @@ void* process_quadrant(void* threadArgs) {
     args->tot_intructions = values[5];
 
     PAPI_cleanup_eventset(EventSet);
-    PAPI_destory_eventset(&EventSet);
+    PAPI_destroy_eventset(&EventSet);
     return NULL;
 }
 
@@ -228,11 +228,11 @@ int main(int argc, char** argv) {
     cout << "Average FPS: " << frame_count / duration_secs << endl;
     
     // Calculate and print the average events counted for each core
-    for (int i = 0; i < NUM_THREADS < i++) {
+    for (int i = 0; i < NUM_THREADS; i++) {
         cout << "Core " << i << " Avg L1 Data Cache Misses Per Frame: " << thread_args[i].l1_data_cache_misses / frame_count << endl;
-        cout << "Core " << i << " Avg L1 Instruction Cache Misses Per Frame: " << thread_args[i].l1_instruction_cache_misses / frame_count << endl;
+        cout << "Core " << i << " Avg L1 Instruction Cache Misses Per Frame: " << thread_args[i].l1_instr_cache_misses / frame_count << endl;
         cout << "Core " << i << " Avg L2 Data Cache Misses Per Frame: " << thread_args[i].l2_data_cache_misses / frame_count << endl;
-        cout << "Core " << i << " Avg Cycles Per Frame: " << thread_args[i].cycles / frame_count << endl;
+        cout << "Core " << i << " Avg Cycles Per Frame: " << thread_args[i].tot_cycles / frame_count << endl;
         cout << "Core " << i << " Avg Branch Mispredictions Per Frame: " << thread_args[i].branch_mispredicts / frame_count << endl;
         cout << "Core " << i << " Avg Instructions Per Frame: " << thread_args[i].tot_intructions / frame_count << endl;
         cout << endl;
