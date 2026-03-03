@@ -219,7 +219,7 @@ int main(int argc, char** argv) {
 	//     // destroyWindow("Display Window");
 	//     destroyAllWindows();
     // }
-    destoryAllWindows();
+    destroyAllWindows();
     waitKey(1);
 
     // calculate and print the runtime
