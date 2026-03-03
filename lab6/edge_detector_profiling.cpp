@@ -22,7 +22,7 @@ extern "C" {
 }
 
 #define NUM_THREADS 4
-#define TOT_EVENTS 1
+#define TOT_EVENTS 6
 
 using namespace cv;
 using namespace std;
@@ -32,6 +32,21 @@ pthread_t threads[NUM_THREADS];
 pthread_barrier_t barrier;
 void *thread_statuses[NUM_THREADS];
 bool frames_remaining = true;
+
+/*-----------------------------------------------------
+* Function: handle_papi_error
+*
+* Description: Handle papi error by printing error and
+* exiting code with error 1
+*
+* param retval: int: return value of papi command
+*--------------------------------------------------------*/ 
+void handle_papi_error(int retval) {
+    if (retval != PAPI_OK) {
+        cerr << "PAPI error: " << PAPI_strerror(retval) << endl;
+        exit(1);
+    }
+}
 
 /*-----------------------------------------------------
 * Function: process_quadrant
@@ -46,6 +61,29 @@ bool frames_remaining = true;
 void* process_quadrant(void* threadArgs) {
     threadArgs_t* args = static_cast<threadArgs_t*>(threadArgs);
 
+    // Pin thread to core
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(args->thread_id, &cpuset);
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+
+	int EventSet = PAPI_NULL;
+	long long values[TOT_EVENTS]; // holds event counter results
+
+	// Create the Event Set
+	handle_papi_error(PAPI_create_eventset(&EventSet));
+
+	// Add all events of interest to the Event Set
+    handle_papi_error(PAPI_add_event(EventSet, PAPI_L1_DCM));
+    handle_papi_error(PAPI_add_event(EventSet, PAPI_L1_ICM));
+    handle_papi_error(PAPI_add_event(EventSet, PAPI_L2_DCM));
+    handle_papi_error(PAPI_add_event(EventSet, PAPI_TOT_CYC));
+    handle_papi_error(PAPI_add_event(EventSet, PAPI_BR_MSP));
+    handle_papi_error(PAPI_add_event(EventSet, PAPI_TOT_INS));
+
+	// Start counting events in the Event Set
+    handle_papi_error(PAPI_start(EventSet));
+
     while (frames_remaining) {
         pthread_barrier_wait(&barrier); // wait for main thread to load the current frame
         to442_grayscale(args->src, args->gray, args->row_0, args->col_0, args->h, args->w);
@@ -53,48 +91,38 @@ void* process_quadrant(void* threadArgs) {
         to442_sobel(args->gray, args->sobel, args->row_0, args->col_0, args->h, args->w);
         pthread_barrier_wait(&barrier); // wait for all other work threads to be done applying sobel
     }
+
+    // Stop the counting of events in the Event Set
+    handle_papi_error(PAPI_stop(EventSet, values));
+
+    // store counter values into threadargs to read back in main
+    args->l1_data_cache_misses = values[0];
+    args->l1_instr_cache_misses = values[1];
+    args->l2_data_cache_misses = values[2];
+    args->tot_cycles = values[3];
+    args->branch_mispredicts = values[4];
+    args->tot_intructions = values[5];
+
+    PAPI_cleanup_eventset(EventSet);
+    PAPI_destory_eventset(&EventSet);
     return NULL;
 }
 
 int main(int argc, char** argv) {
     auto start = chrono::high_resolution_clock::now(); // start timer for runtime
-	int retval, EventSet=PAPI_NULL;
-	long_long values[TOT_EVENTS]; // holds event counter results
-
     if (argc != 2) {
         cerr << "Incorrect usage - use via: 'edge_detector [video_path]'" << endl;
         return -1;
     }
-
-	int retval, EventSet=PAPI_NULL;
-	long_long values[TOT_EVENTS]; // holds event counter results
     
 	// Initialize the PAPI library
-	retval = PAPI_library_init(PAPI_VER_CURRENT);
-	if (retval != PAPI_VER_CURRENT); {
-		fprintf(stderr, "PAPI library init error!\n");
-		exit(1);
+	int retval = PAPI_library_init(PAPI_VER_CURRENT);
+	if (retval != PAPI_VER_CURRENT) {
+        handle_papi_error(retval);
 	}
 
-	// Initialize thread support
-	if (PAPI_thread_init(pthread_self)) {
-
-	}	
-
-	// Create the Event Set
-	if (PAPI_create_eventset(&EventSet) != PAPI_OK) {
-		fprintf(stderr, "Error creating event set");
-	}
-
-	// Add Total Instructions Executed to the Event Set
-	if (PAPI_add_event(EventSet, PAPI_TOT_INS) != PAPI_OK) {
-		fprintf(stderr, "Error adding speculative loads event to event set");
-	}
-
-	// Start counting events in the Event Set
-	/if (PAPI_start(EventSet) != PAPI_OK) {
-		fprintf(stderr, "Error starting event counting");
-	}
+    // Initialize thread support
+    handle_papi_error(PAPI_thread_init(pthread_self));
 
 	// Initialize video reader
     string cap_path = argv[1];
@@ -105,19 +133,6 @@ int main(int argc, char** argv) {
     } else {
         cout << "\"" << cap_path << "\" opened successfully!" << endl;
     }
-
-	// Stop the counting of events in the Event Set
-	/if (PAPI_stop(EventSet, values) != PAPI_OK) {
-		fprintf(stderr, "Error creating event set");
-	}
-
-	// Read the events in the Event set
-	if (PAPI_read(EventSet, values) != PAPI_OK) {
-		fprintf(stderr, "Error creating event set");
-	}
-	printf("Instructions retired: %lld\n", values[0]);
-
-
 
     // get and print video attributes
     int frame_count = static_cast<int>(cap.get(CAP_PROP_FRAME_COUNT));
@@ -142,10 +157,10 @@ int main(int argc, char** argv) {
     int sub_h = height / 4;
     
     // set threadArgs for each quadrant
-    threadArgs_t row_0_args = {&frame, &frame_gray, &frame_sobel, 0,         0, sub_h+2, width, 0};
-    threadArgs_t row_1_args = {&frame, &frame_gray, &frame_sobel, sub_h-1,   0, sub_h+2, width, 1};
-    threadArgs_t row_2_args = {&frame, &frame_gray, &frame_sobel, 2*sub_h-1, 0, sub_h+2, width, 2};
-    threadArgs_t row_3_args = {&frame, &frame_gray, &frame_sobel, 3*sub_h-1, 0, sub_h+1, width, 3};
+    threadArgs_t row_0_args = {&frame, &frame_gray, &frame_sobel, 0,         0, sub_h+2, width, 0, 0, 0, 0, 0, 0, 0};
+    threadArgs_t row_1_args = {&frame, &frame_gray, &frame_sobel, sub_h-1,   0, sub_h+2, width, 1, 0, 0, 0, 0, 0, 0};
+    threadArgs_t row_2_args = {&frame, &frame_gray, &frame_sobel, 2*sub_h-1, 0, sub_h+2, width, 2, 0, 0, 0, 0, 0, 0};
+    threadArgs_t row_3_args = {&frame, &frame_gray, &frame_sobel, 3*sub_h-1, 0, sub_h+1, width, 3, 0, 0, 0, 0, 0, 0};
 
     threadArgs_t thread_args[] = {row_0_args, row_1_args, row_2_args, row_3_args};
     int pthread_create_ret_vals[NUM_THREADS];
@@ -208,7 +223,20 @@ int main(int argc, char** argv) {
     // calculate and print the runtime
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    cout << "Program Runtime: " << (float)duration.count()/1000 << " seconds\n";  // e.g., 150000 us [web:2]
+    float duration_secs = (float)duration.count()/1000;
+    cout << "Program Runtime: " << duration_secs << " seconds\n";  // e.g., 150000 us [web:2]
+    cout << "Average FPS: " << frame_count / duration_secs << endl;
+    
+    // Calculate and print the average events counted for each core
+    for (int i = 0; i < NUM_THREADS < i++) {
+        cout << "Core " << i << " Avg L1 Data Cache Misses Per Frame: " << thread_args[i].l1_data_cache_misses / frame_count << endl;
+        cout << "Core " << i << " Avg L1 Instruction Cache Misses Per Frame: " << thread_args[i].l1_instruction_cache_misses / frame_count << endl;
+        cout << "Core " << i << " Avg L2 Data Cache Misses Per Frame: " << thread_args[i].l2_data_cache_misses / frame_count << endl;
+        cout << "Core " << i << " Avg Cycles Per Frame: " << thread_args[i].cycles / frame_count << endl;
+        cout << "Core " << i << " Avg Branch Mispredictions Per Frame: " << thread_args[i].branch_mispredicts / frame_count << endl;
+        cout << "Core " << i << " Avg Instructions Per Frame: " << thread_args[i].tot_intructions / frame_count << endl;
+        cout << endl;
+    }
 
     return 0;
 }

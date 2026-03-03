@@ -34,10 +34,12 @@ typedef struct {
     int h;
     int w;
     int thread_id;
-	int l1_data_cache_misses;
-	int l1_instr_cache_misses;
-	int l2_data_cache_misses;
-	int cycles;
+	long long l1_data_cache_misses;
+	long long l1_instr_cache_misses;
+	long long l2_data_cache_misses;
+	long long tot_cycles;
+    long long branch_mispredicts;
+    long long tot_intructions;
 } threadArgs_t;
 
 /*-----------------------------------------------------
