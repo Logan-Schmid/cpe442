@@ -227,8 +227,12 @@ int main(int argc, char** argv) {
     cout << "Program Runtime: " << duration_secs << " seconds\n";  // e.g., 150000 us [web:2]
     cout << "Average FPS: " << frame_count / duration_secs << endl;
     
+    long long all_cores_caches_misses_total = 0;
+    long long all_cores_cycles_total = 0;
     // Calculate and print the average events counted for each core
     for (int i = 0; i < NUM_THREADS; i++) {
+        all_cores_caches_misses_total = all_cores_caches_misses_total + thread_args[i].l1_data_cache_misses + thread_args[i].l1_instr_cache_misses + thread_args[i].l2_data_cache_misses;
+        all_cores_cycles_total += thread_args[i].tot_cycles;
         cout << "Core " << i << " Avg L1 Data Cache Misses Per Frame: " << thread_args[i].l1_data_cache_misses / frame_count << endl;
         cout << "Core " << i << " Avg L1 Instruction Cache Misses Per Frame: " << thread_args[i].l1_instr_cache_misses / frame_count << endl;
         cout << "Core " << i << " Avg L2 Data Cache Misses Per Frame: " << thread_args[i].l2_data_cache_misses / frame_count << endl;
@@ -237,6 +241,9 @@ int main(int argc, char** argv) {
         cout << "Core " << i << " Avg Instructions Per Frame: " << thread_args[i].tot_intructions / frame_count << endl;
         cout << endl;
     }
+    
+    cout << "Avg Total Cache Misses Per Core Per Frame: " << (float)all_cores_caches_misses_total / NUM_THREADS << endl;
+    cout << "Avg Cycles Per Core Per Frame: " << (float)all_cores_cycles_total / NUM_THREADS << endl;
 
     return 0;
 }
