@@ -23,27 +23,19 @@ using namespace std;
 * Description: Converts image to grayscale using the BT.709 algorithm
 * Gray = 0.0722B + 0.7152G + 0.2126R
 *
-* param src: Mat*: the input color image
-* param dst: Mat*: the output grayscale image
-* param r0: int: the starting row index
-* param c0: int: the starting column index
+* param source: Mat*: the input color image
+* param output: Mat*: the output grayscale image
+* param row_size: int: the starting row index
+* param col_size: int: the starting column index
 * param h: int: the height of the processing region
 * param w: int: the width of the processing region
 *
 * return: void
 *--------------------------------------------------------*/ 
-//Src = source img color
-//dst = output img 
-//row = starting row index
-//col = starting col index
-//h = heigh of the processing region
-//w = width of the processing region
-
-//we iterate through the row
-//then inner iterate through the col
 void to442_grayscale(Mat* source, Mat *output,
-                     int row_size, int col_size, int h, int w)
-{
+                     int row_size, int col_size, int h, int w) {
+    //we iterate through the row
+    //then inner iterate through the col
     for(int row = row_size; row < row_size + h; row++)
     {
         uchar* source_pointer = source->ptr<uchar>(row) + 3 * col_size;
@@ -91,15 +83,7 @@ void to442_grayscale(Mat* source, Mat *output,
         }
     }
 }
-//  void to442_grayscale(Mat* src, Mat* dst, int r0, int c0, int h, int w) {
-//     for (int row = r0; row < r0 + h; row++) {
-//         for (int col = c0; col < c0 + w; col++) {
-//             Vec3b &pix = (*src).at<Vec3b>(row,col);
-//             uchar gray = static_cast<uchar>(0.0722*pix[0] + 0.7152*pix[1] + 0.2126*pix[2]);
-//             (*dst).at<uchar>(row,col) = gray;
-//         }
-//     }
-// }
+
 
 /*-----------------------------------------------------
 * Function: to442_sobel
