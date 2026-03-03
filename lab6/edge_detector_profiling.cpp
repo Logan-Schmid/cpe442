@@ -17,7 +17,12 @@
 #include <chrono>
 #include "processing.hpp"
 
+extern "C" {
+	#include <papi.h>
+}
+
 #define NUM_THREADS 4
+#define TOT_EVENTS 1
 
 using namespace cv;
 using namespace std;
@@ -53,13 +58,45 @@ void* process_quadrant(void* threadArgs) {
 
 int main(int argc, char** argv) {
     auto start = chrono::high_resolution_clock::now(); // start timer for runtime
+	int retval, EventSet=PAPI_NULL;
+	long_long values[TOT_EVENTS]; // holds event counter results
 
     if (argc != 2) {
         cerr << "Incorrect usage - use via: 'edge_detector [video_path]'" << endl;
         return -1;
     }
 
-    // Initialize video reader
+	int retval, EventSet=PAPI_NULL;
+	long_long values[TOT_EVENTS]; // holds event counter results
+    
+	// Initialize the PAPI library
+	retval = PAPI_library_init(PAPI_VER_CURRENT);
+	if (retval != PAPI_VER_CURRENT); {
+		fprintf(stderr, "PAPI library init error!\n");
+		exit(1);
+	}
+
+	// Initialize thread support
+	if (PAPI_thread_init(pthread_self)) {
+
+	}	
+
+	// Create the Event Set
+	if (PAPI_create_eventset(&EventSet) != PAPI_OK) {
+		fprintf(stderr, "Error creating event set");
+	}
+
+	// Add Total Instructions Executed to the Event Set
+	if (PAPI_add_event(EventSet, PAPI_TOT_INS) != PAPI_OK) {
+		fprintf(stderr, "Error adding speculative loads event to event set");
+	}
+
+	// Start counting events in the Event Set
+	/if (PAPI_start(EventSet) != PAPI_OK) {
+		fprintf(stderr, "Error starting event counting");
+	}
+
+	// Initialize video reader
     string cap_path = argv[1];
     VideoCapture cap(cap_path);
     if (!cap.isOpened()) {
@@ -68,6 +105,19 @@ int main(int argc, char** argv) {
     } else {
         cout << "\"" << cap_path << "\" opened successfully!" << endl;
     }
+
+	// Stop the counting of events in the Event Set
+	/if (PAPI_stop(EventSet, values) != PAPI_OK) {
+		fprintf(stderr, "Error creating event set");
+	}
+
+	// Read the events in the Event set
+	if (PAPI_read(EventSet, values) != PAPI_OK) {
+		fprintf(stderr, "Error creating event set");
+	}
+	printf("Instructions retired: %lld\n", values[0]);
+
+
 
     // get and print video attributes
     int frame_count = static_cast<int>(cap.get(CAP_PROP_FRAME_COUNT));
