@@ -215,12 +215,12 @@ int main(int argc, char** argv) {
 
     // Release the video capture object and close any OpenCV windows
     cap.release();
-    if (getWindowProperty("Display Window", WND_PROP_VISIBLE) >= 0) {
-	    // destroyWindow("Display Window");
-	    destroyAllWindows();
-    }
+    // if (getWindowProperty("Display Window", WND_PROP_VISIBLE) >= 0) {
+	//     // destroyWindow("Display Window");
+	//     destroyAllWindows();
+    // }
+    destoryAllWindows();
     waitKey(1);
-    // destoryAllWindows();
 
     // calculate and print the runtime
     auto stop = std::chrono::high_resolution_clock::now();
@@ -235,17 +235,17 @@ int main(int argc, char** argv) {
     for (int i = 0; i < NUM_THREADS; i++) {
         all_cores_caches_misses_total = all_cores_caches_misses_total + thread_args[i].l1_data_cache_misses + thread_args[i].l1_instr_cache_misses + thread_args[i].l2_data_cache_misses;
         all_cores_cycles_total += thread_args[i].tot_cycles;
-        cout << "Core " << i << " Avg L1 Data Cache Misses Per Frame: " << thread_args[i].l1_data_cache_misses / frame_count << endl;
-        cout << "Core " << i << " Avg L1 Instruction Cache Misses Per Frame: " << thread_args[i].l1_instr_cache_misses / frame_count << endl;
-        cout << "Core " << i << " Avg L2 Data Cache Misses Per Frame: " << thread_args[i].l2_data_cache_misses / frame_count << endl;
-        cout << "Core " << i << " Avg Cycles Per Frame: " << thread_args[i].tot_cycles / frame_count << endl;
-        cout << "Core " << i << " Avg Branch Mispredictions Per Frame: " << thread_args[i].branch_mispredicts / frame_count << endl;
-        cout << "Core " << i << " Avg Instructions Per Frame: " << thread_args[i].tot_intructions / frame_count << endl;
+        cout << "Core " << i << " Avg L1 Data Cache Misses Per Frame: " << thread_args[i].l1_data_cache_misses / (double)frame_count << endl;
+        cout << "Core " << i << " Avg L1 Instruction Cache Misses Per Frame: " << thread_args[i].l1_instr_cache_misses / (double)frame_count << endl;
+        cout << "Core " << i << " Avg L2 Data Cache Misses Per Frame: " << thread_args[i].l2_data_cache_misses / (double)frame_count << endl;
+        cout << "Core " << i << " Avg Cycles Per Frame: " << thread_args[i].tot_cycles / (double)frame_count << endl;
+        cout << "Core " << i << " Avg Branch Mispredictions Per Frame: " << thread_args[i].branch_mispredicts / (double)frame_count << endl;
+        cout << "Core " << i << " Avg Instructions Per Frame: " << thread_args[i].tot_intructions / (double)frame_count << endl;
         cout << endl;
     }
     
-    cout << "Avg Total Cache Misses Per Core Per Frame: " << (double)all_cores_caches_misses_total / NUM_THREADS << endl;
-    cout << "Avg Cycles Per Core Per Frame: " << (double)all_cores_cycles_total / NUM_THREADS << endl;
+    cout << "Avg Total Cache Misses Per Core Per Frame: " << (double)all_cores_caches_misses_total / (NUM_THREADS*frame_count) << endl;
+    cout << "Avg Cycles Per Core Per Frame: " << (double)all_cores_cycles_total / (NUM_THREADS*frame_count) << endl;
 
     return 0;
 }
