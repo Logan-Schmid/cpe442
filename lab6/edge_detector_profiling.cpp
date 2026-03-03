@@ -195,7 +195,7 @@ int main(int argc, char** argv) {
 
         // Wait for appropriate time between frames and check if 'q' is pressed to exit
         char key = waitKey(1);
-        if (key == 'q') {
+        if (key == 'q' || getWindowProperty("Display Window", WND_PROP_VISIBLE) < 1) {
             break;
         }
     }
@@ -216,8 +216,10 @@ int main(int argc, char** argv) {
     // Release the video capture object and close any OpenCV windows
     cap.release();
     if (getWindowProperty("Display Window", WND_PROP_VISIBLE) >= 0) {
-	destroyWindow("Display Window");
+	    // destroyWindow("Display Window");
+	    destroyAllWindows();
     }
+    waitKey(1);
     // destoryAllWindows();
 
     // calculate and print the runtime
@@ -242,8 +244,8 @@ int main(int argc, char** argv) {
         cout << endl;
     }
     
-    cout << "Avg Total Cache Misses Per Core Per Frame: " << (float)all_cores_caches_misses_total / NUM_THREADS << endl;
-    cout << "Avg Cycles Per Core Per Frame: " << (float)all_cores_cycles_total / NUM_THREADS << endl;
+    cout << "Avg Total Cache Misses Per Core Per Frame: " << (double)all_cores_caches_misses_total / NUM_THREADS << endl;
+    cout << "Avg Cycles Per Core Per Frame: " << (double)all_cores_cycles_total / NUM_THREADS << endl;
 
     return 0;
 }
