@@ -1,0 +1,37 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+// Both input and output are 1-channel grayscale images
+layout(binding = 0, r8) uniform readonly image2D inputImage;
+layout(binding = 1, r8) uniform writeonly image2D outputImage;
+
+void main() {
+    ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(inputImage);
+    
+    // Bounds check: Skip the 1-pixel outer border just like your C++ code
+    if(coords.x < 1 || coords.y < 1 || coords.x >= size.x - 1 || coords.y >= size.y - 1) {
+        return;
+    }
+
+    // Read the 3x3 neighborhood. .r extracts the grayscale value (0.0 to 1.0)
+    float tl = imageLoad(inputImage, coords + ivec2(-1, -1)).r; // Top-Left
+    float tc = imageLoad(inputImage, coords + ivec2( 0, -1)).r; // Top-Center
+    float tr = imageLoad(inputImage, coords + ivec2( 1, -1)).r; // Top-Right
+    float ml = imageLoad(inputImage, coords + ivec2(-1,  0)).r; // Mid-Left
+    float mr = imageLoad(inputImage, coords + ivec2( 1,  0)).r; // Mid-Right
+    float bl = imageLoad(inputImage, coords + ivec2(-1,  1)).r; // Bot-Left
+    float bc = imageLoad(inputImage, coords + ivec2( 0,  1)).r; // Bot-Center
+    float br = imageLoad(inputImage, coords + ivec2( 1,  1)).r; // Bot-Right
+
+    // Apply Sobel operators (assuming standard weights: 1, 2, 1)
+    float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
+    float gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);
+
+    // Compute G = |Gx| + |Gy| 
+    // Note: GLSL handles clamping to 1.0 (255) automatically when writing to an r8 image
+    float g = abs(gx) + abs(gy);
+
+    imageStore(outputImage, coords, vec4(g, 0.0, 0.0, 1.0));
+}
