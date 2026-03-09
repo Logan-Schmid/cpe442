@@ -7,7 +7,7 @@ LDFLAGS = $(shell pkg-config --libs opencv4) -lvulkan -lkompute
 
 # Project files
 TARGET = edge_detector_final
-SRCS = processing.cpp edge_detector_final.cpp
+SRCS = edge_detector_final.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 # Shader files
