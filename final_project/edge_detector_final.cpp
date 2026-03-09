@@ -3,20 +3,23 @@
 #include <vector>
 #include <fstream>
 
+using namespace cv;
+using namespace std;
+
 // Helper to load SPIR-V files
-std::vector<uint32_t> load_spirv(const std::string& filename) {
-    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+vector<uint32_t> load_spirv(const string& filename) {
+    ifstream file(filename, ios::binary | ios::ate);
     size_t size = file.tellg();
-    file.seekg(0, std::ios::beg);
-    std::vector<uint32_t> buffer(size / 4);
+    file.seekg(0, ios::beg);
+    vector<uint32_t> buffer(size / 4);
     file.read(reinterpret_cast<char*>(buffer.data()), size);
     return buffer;
 }
 
-void process_image_vulkan(cv::Mat& inputBGR) {
+void process_image_vulkan(Mat& inputBGR) {
     // 1. Prepare Data: GPU prefers 4-channel RGBA for alignment
-    cv::Mat inputRGBA;
-    cv::cvtColor(inputBGR, inputRGBA, cv::COLOR_BGR2RGBA);
+    Mat inputRGBA;
+    cvtColor(inputBGR, inputRGBA, COLOR_BGR2RGBA);
     
     int width = inputRGBA.cols;
     int height = inputRGBA.rows;
@@ -32,12 +35,12 @@ void process_image_vulkan(cv::Mat& inputBGR) {
     auto tensorGray = mgr.tensor(nullptr, width * height, sizeof(uchar), kp::Tensor::TensorDataTypes::eUnsignedInt);
     auto tensorSobel = mgr.tensor(nullptr, width * height, sizeof(uchar), kp::Tensor::TensorDataTypes::eUnsignedInt);
 
-    std::vector<std::shared_ptr<kp::Tensor>> paramsGray = {tensorIn, tensorGray};
-    std::vector<std::shared_ptr<kp::Tensor>> paramsSobel = {tensorGray, tensorSobel};
+    vector<shared_ptr<kp::Tensor>> paramsGray = {tensorIn, tensorGray};
+    vector<shared_ptr<kp::Tensor>> paramsSobel = {tensorGray, tensorSobel};
 
     // 4. Load Compiled Shaders
-    std::vector<uint32_t> graySpirv = load_spirv("grayscale.spv");
-    std::vector<uint32_t> sobelSpirv = load_spirv("sobel.spv");
+    vector<uint32_t> graySpirv = load_spirv("grayscale.spv");
+    vector<uint32_t> sobelSpirv = load_spirv("sobel.spv");
 
     // 5. Build and Run Sequence
     // We define a sequence: Sync data to GPU -> Run Gray -> Run Sobel -> Sync back
@@ -55,7 +58,7 @@ void process_image_vulkan(cv::Mat& inputBGR) {
         ->eval();
 
     // 6. Map result back to OpenCV
-    cv::Mat result(height, width, CV_8UC1, tensorSobel->data());
-    cv::imshow("GPU Processed Edges", result);
-    cv::waitKey(0);
+    Mat result(height, width, CV_8UC1, tensorSobel->data());
+    imshow("GPU Processed Edges", result);
+    waitKey(0);
 }
