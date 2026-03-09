@@ -6,8 +6,8 @@ CXXFLAGS = -std=c++17 -Wall -O3 $(shell pkg-config --cflags opencv4)
 LDFLAGS = $(shell pkg-config --libs opencv4) -lvulkan -lkompute
 
 # Project files
-TARGET = edge_detector_vec_instr
-SRCS = processing.cpp main.cpp
+TARGET = edge_detector_final
+SRCS = processing.cpp edge_detector_final.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 # Shader files
