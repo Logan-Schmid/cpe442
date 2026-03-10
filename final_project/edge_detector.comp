@@ -3,7 +3,7 @@
 layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(binding = 0) readonly buffer InBuf { uint inputImage[]; };
-layout(binding = 1) writeonly buffer OutBuf { float outputImage[]; };
+layout(binding = 1) writeonly buffer OutBuf { uint outputImage[]; };
 layout(binding = 2) readonly buffer DimBuf { uint dims[]; }; // Still holds INPUT width and height
 
 float getGray(uint x, uint y, uint inWidth) {
@@ -47,9 +47,11 @@ void main() {
     float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
     float gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);
 
-    float g = abs(gx) + abs(gy);
+    float g = clamp(abs(gx) + abs(gy), 0.0, 1.0);
+    uint gray = uint(g * 255.0);
+    uint packedRgba = (0xFFu << 24) | (gray << 16) | (gray << 8) | gray;
 
-    // Write to the smaller output buffer
+    // Write packed grayscale RGBA to the smaller output buffer
     uint outIndex = (y * outWidth) + x;
-    outputImage[outIndex] = clamp(g, 0.0, 1.0);
+    outputImage[outIndex] = packedRgba;
 }

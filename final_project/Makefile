@@ -14,10 +14,16 @@ ifeq ($(strip $(FMT_LIBS)),)
 FMT_LIBS = -lfmt
 endif
 
-CXXFLAGS = -std=c++17 -Wall -O3 $(shell pkg-config --cflags opencv4) $(KOMPUTE_CFLAGS)
+GLFW_CFLAGS = $(shell pkg-config --cflags glfw3 2>/dev/null)
+GLFW_LIBS = $(shell pkg-config --libs glfw3 2>/dev/null)
+ifeq ($(strip $(GLFW_LIBS)),)
+GLFW_LIBS = -lglfw
+endif
+
+CXXFLAGS = -std=c++17 -Wall -O3 $(shell pkg-config --cflags opencv4) $(KOMPUTE_CFLAGS) $(GLFW_CFLAGS)
 
 # Libraries to link: OpenCV + Kompute stack
-LDFLAGS = $(shell pkg-config --libs opencv4) $(KOMPUTE_LIBS) $(FMT_LIBS)
+LDFLAGS = $(shell pkg-config --libs opencv4) $(KOMPUTE_LIBS) $(FMT_LIBS) $(GLFW_LIBS)
 
 # Project files
 TARGET = edge_detector_final
