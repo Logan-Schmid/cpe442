@@ -46,16 +46,19 @@ void process_video_vulkan(const string& videoPath) {
     kp::Manager mgr; 
 
     // 3. Create Tensors
-    // The input tensor still needs to hold the entire original frame
-    auto tensorIn = mgr.tensor(nullptr, width * height, sizeof(uint32_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
+    // Initialize host vectors with zeros to allocate the correct amount of space
+    vector<uint32_t> inBuffer(width * height, 0);
+    auto tensorIn = mgr.tensorT<uint32_t>(inBuffer);
     
     // The output tensor is strictly sized to the new, smaller dimensions
-    auto tensorSobel = mgr.tensor(nullptr, outWidth * outHeight, sizeof(float), kp::Tensor::TensorDataTypes::eFloat);
+    vector<float> outBuffer(outWidth * outHeight, 0.0f);
+    auto tensorSobel = mgr.tensorT<float>(outBuffer);
     
-    // We pass the INPUT dimensions to the shader so it knows how to calculate the 1D index of the input buffer
+    // We pass the INPUT dimensions to the shader
     vector<uint32_t> dims = { width, height };
-    auto tensorDims = mgr.tensor(dims.data(), 2, sizeof(uint32_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
+    auto tensorDims = mgr.tensorT<uint32_t>(dims);
 
+    // Group them for the algorithm (TensorT safely upcasts to Tensor)
     vector<shared_ptr<kp::Tensor>> params = {tensorIn, tensorSobel, tensorDims};
 
     // 4. Load Compiled Shader
