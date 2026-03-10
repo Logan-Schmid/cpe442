@@ -1,0 +1,55 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0) readonly buffer InBuf { uint inputImage[]; };
+layout(binding = 1) writeonly buffer OutBuf { float outputImage[]; };
+layout(binding = 2) readonly buffer DimBuf { uint dims[]; }; // Still holds INPUT width and height
+
+float getGray(uint x, uint y, uint inWidth) {
+    uint index = (y * inWidth) + x;
+    uint pixel = inputImage[index];
+    
+    float r = float(pixel & 0xFF);
+    float g = float((pixel >> 8) & 0xFF);
+    float b = float((pixel >> 16) & 0xFF);
+    
+    return (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255.0;
+}
+
+void main() {
+    uint x = gl_GlobalInvocationID.x; // Maps to OUTPUT x
+    uint y = gl_GlobalInvocationID.y; // Maps to OUTPUT y
+    
+    uint inWidth = dims[0];
+    uint inHeight = dims[1];
+    
+    uint outWidth = inWidth - 2;
+    uint outHeight = inHeight - 2;
+
+    // Bounds check against the SMALLER output dimensions
+    // The 16x16 workgroups will overhang the edges, and this safely culls the extra threads
+    if (x >= outWidth || y >= outHeight) {
+        return;
+    }
+
+    // Since our output thread is at (x, y), the 3x3 kernel on the input 
+    // simply starts at (x, y) and goes to (x+2, y+2).
+    float tl = getGray(x,     y,     inWidth); // Top-Left
+    float tc = getGray(x + 1, y,     inWidth); // Top-Center
+    float tr = getGray(x + 2, y,     inWidth); // Top-Right
+    float ml = getGray(x,     y + 1, inWidth); // Mid-Left
+    float mr = getGray(x + 2, y + 1, inWidth); // Mid-Right
+    float bl = getGray(x,     y + 2, inWidth); // Bot-Left
+    float bc = getGray(x + 1, y + 2, inWidth); // Bot-Center
+    float br = getGray(x + 2, y + 2, inWidth); // Bot-Right
+
+    float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
+    float gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);
+
+    float g = abs(gx) + abs(gy);
+
+    // Write to the smaller output buffer
+    uint outIndex = (y * outWidth) + x;
+    outputImage[outIndex] = clamp(g, 0.0, 1.0);
+}

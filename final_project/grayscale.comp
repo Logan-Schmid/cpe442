@@ -1,30 +1,35 @@
 #version 450
 
-// Define the SIMT workgroup size (processes 16x16 pixels per group)
+// Process 16x16 pixels per workgroup
 layout(local_size_x = 16, local_size_y = 16) in;
 
-// Bindings for the input and output images. 
-// Note: Vulkan prefers 4-channel (RGBA) over 3-channel (BGR).
-layout(binding = 0, rgba8) uniform readonly image2D inputImage;
-layout(binding = 1, r8) uniform writeonly image2D outputImage;
+// Bindings for Kompute Tensors (SSBOs)
+layout(binding = 0) readonly buffer InBuf { uint inputImage[]; };
+layout(binding = 1) writeonly buffer OutBuf { float outputImage[]; };
+layout(binding = 2) readonly buffer DimBuf { uint dims[]; };
 
 void main() {
-    // Get the exact X,Y coordinate for this specific thread/pixel
-    ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 size = imageSize(inputImage);
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+    uint width = dims[0];
+    uint height = dims[1];
     
-    // Bounds check to ensure we don't read outside the image
-    if (coords.x >= size.x || coords.y >= size.y) {
-        return; 
-    }
+    // Bounds check to prevent reading memory outside the image
+    if (x >= width || y >= height) return;
 
-    // Load the RGBA pixel
-    vec4 pixel = imageLoad(inputImage, coords);
+    // Flatten the 2D coordinate into a 1D array index
+    uint index = (y * width) + x;
 
-    // Compute grayscale using a dot product 
-    // OpenCV's BGR format mapped to RGBA means pixel.r = R, pixel.g = G, pixel.b = B
-    float gray = dot(pixel.rgb, vec3(0.2126, 0.7152, 0.0722));
+    // Grab the 32-bit pixel and unpack the RGBA bytes
+    uint pixel = inputImage[index];
 
-    // Store the result in the 1-channel (r8) output image
-    imageStore(outputImage, coords, vec4(gray, 0.0, 0.0, 1.0));
+    // OpenCV stores RGBA sequentially in memory, so R is the lowest byte
+    float r = float(pixel & 0xFF);
+    float g = float((pixel >> 8) & 0xFF);
+    float b = float((pixel >> 16) & 0xFF);
+
+    // Compute grayscale and normalize to a [0.0, 1.0] range for float output
+    float gray = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255.0;
+
+    outputImage[index] = gray;
 }

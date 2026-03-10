@@ -2,6 +2,7 @@
 #include <kompute/Kompute.hpp>
 #include <vector>
 #include <fstream>
+#include <iostream>
 
 using namespace cv;
 using namespace std;
@@ -9,6 +10,9 @@ using namespace std;
 // Helper to load SPIR-V files
 vector<uint32_t> load_spirv(const string& filename) {
     ifstream file(filename, ios::binary | ios::ate);
+    if (!file.is_open()) {
+        throw runtime_error("Failed to open SPIR-V file: " + filename);
+    }
     size_t size = file.tellg();
     file.seekg(0, ios::beg);
     vector<uint32_t> buffer(size / 4);
@@ -16,49 +20,109 @@ vector<uint32_t> load_spirv(const string& filename) {
     return buffer;
 }
 
-void process_image_vulkan(Mat& inputBGR) {
-    // 1. Prepare Data: GPU prefers 4-channel RGBA for alignment
-    Mat inputRGBA;
-    cvtColor(inputBGR, inputRGBA, COLOR_BGR2RGBA);
-    
-    int width = inputRGBA.cols;
-    int height = inputRGBA.rows;
+void process_video_vulkan(const string& videoPath) {
+    VideoCapture cap;
+    if (videoPath == "0") cap.open(0);
+    else cap.open(videoPath);
 
-    // 2. Initialize Kompute Manager (selects the Pi 4 VideoCore VI)
+    if (!cap.isOpened()) throw runtime_error("Error: Could not open video.");
+
+    Mat firstFrame;
+    cap >> firstFrame;
+    if (firstFrame.empty()) throw runtime_error("Error: Video file is empty.");
+
+    // 1. Calculate Input vs Output Dimensions
+    uint32_t width = firstFrame.cols;
+    uint32_t height = firstFrame.rows;
+    
+    // Unpadded (Valid) convolution shrinks the output by 1 pixel on every side (2 pixels total)
+    uint32_t outWidth = width - 2;
+    uint32_t outHeight = height - 2;
+    
+    cout << "Video initialized. Input: " << width << "x" << height 
+         << " | Output: " << outWidth << "x" << outHeight << endl;
+
+    // 2. Initialize Kompute Manager
     kp::Manager mgr; 
 
     // 3. Create Tensors
-    // Tensor 0: Input Image (RGBA)
-    // Tensor 1: Grayscale Output (1-channel)
-    // Tensor 2: Sobel Output (1-channel)
-    auto tensorIn = mgr.tensor(inputRGBA.data, width * height * 4, sizeof(uchar), kp::Tensor::TensorDataTypes::eUnsignedInt);
-    auto tensorGray = mgr.tensor(nullptr, width * height, sizeof(uchar), kp::Tensor::TensorDataTypes::eUnsignedInt);
-    auto tensorSobel = mgr.tensor(nullptr, width * height, sizeof(uchar), kp::Tensor::TensorDataTypes::eUnsignedInt);
+    // The input tensor still needs to hold the entire original frame
+    auto tensorIn = mgr.tensor(nullptr, width * height, sizeof(uint32_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
+    
+    // The output tensor is strictly sized to the new, smaller dimensions
+    auto tensorSobel = mgr.tensor(nullptr, outWidth * outHeight, sizeof(float), kp::Tensor::TensorDataTypes::eFloat);
+    
+    // We pass the INPUT dimensions to the shader so it knows how to calculate the 1D index of the input buffer
+    vector<uint32_t> dims = { width, height };
+    auto tensorDims = mgr.tensor(dims.data(), 2, sizeof(uint32_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
 
-    vector<shared_ptr<kp::Tensor>> paramsGray = {tensorIn, tensorGray};
-    vector<shared_ptr<kp::Tensor>> paramsSobel = {tensorGray, tensorSobel};
+    vector<shared_ptr<kp::Tensor>> params = {tensorIn, tensorSobel, tensorDims};
 
-    // 4. Load Compiled Shaders
-    vector<uint32_t> graySpirv = load_spirv("grayscale.spv");
-    vector<uint32_t> sobelSpirv = load_spirv("sobel.spv");
+    // 4. Load Compiled Shader
+    vector<uint32_t> spirv = load_spirv("edge_detector.spv");
 
-    // 5. Build and Run Sequence
-    // We define a sequence: Sync data to GPU -> Run Gray -> Run Sobel -> Sync back
-    auto algorithmGray = mgr.algorithm(paramsGray, graySpirv);
-    auto algorithmSobel = mgr.algorithm(paramsSobel, sobelSpirv);
+    // 5. Build Algorithm and Sequence
+    auto algorithm = mgr.algorithm(params, spirv);
+    
+    // We only dispatch enough workgroups to cover the smaller OUTPUT image
+    kp::Workgroup workgroups = { (uint32_t)ceil(outWidth / 16.0), (uint32_t)ceil(outHeight / 16.0), 1 };
 
-    // Calculate workgroups (we used 16x16 in the shader)
-    kp::Workgroup workgroups = { (uint32_t)ceil(width / 16.0), (uint32_t)ceil(height / 16.0), 1 };
+    // Sync dimensions to the GPU once
+    mgr.sequence()->record<kp::OpTensorSyncDevice>({tensorDims})->eval();
 
-    mgr.sequence()
-        ->record<kp::OpTensorSyncDevice>({tensorIn}) // Upload to GPU
-        ->record<kp::OpAlgoDispatch>(algorithmGray, workgroups)
-        ->record<kp::OpAlgoDispatch>(algorithmSobel, workgroups)
-        ->record<kp::OpTensorSyncLocal>({tensorSobel}) // Download result
-        ->eval();
+    // Pre-record the processing loop sequence
+    auto seq = mgr.sequence();
+    seq->record<kp::OpTensorSyncDevice>({tensorIn})
+       ->record<kp::OpAlgoDispatch>(algorithm, workgroups)
+       ->record<kp::OpTensorSyncLocal>({tensorSobel});
 
-    // 6. Map result back to OpenCV
-    Mat result(height, width, CV_8UC1, tensorSobel->data());
-    imshow("GPU Processed Edges", result);
-    waitKey(0);
+    // 6. Processing Loop
+    Mat frame = firstFrame;
+    Mat inputRGBA;
+    cout << "Press 'ESC' or 'q' to exit..." << endl;
+
+    while (true) {
+        // Convert to RGBA
+        cvtColor(frame, inputRGBA, COLOR_BGR2RGBA);
+
+        // Copy the full input frame into tensorIn
+        memcpy(tensorIn->data(), inputRGBA.data, width * height * 4);
+
+        // Execute GPU workload
+        seq->eval();
+
+        // Wrap the output tensor data in a Mat sized exactly to outWidth and outHeight
+        Mat result(outHeight, outWidth, CV_32FC1, tensorSobel->data());
+        
+        imshow("GPU Processed Video (Unpadded)", result);
+
+        char key = (char)waitKey(1);
+        if (key == 27 || key == 'q') break;
+
+        cap >> frame;
+        if (frame.empty()) break; 
+    }
+
+    cap.release();
+    destroyAllWindows();
+}
+
+int main(int argc, char** argv) {
+    string videoPath = "0"; 
+    if (argc == 2) {
+        videoPath = argv[1];
+    }
+    else {
+        cerr << "Incorrect usage - use via: 'edge_detector_final [video_path]" << endl;
+        return EXIT_FAILURE;
+    }        
+
+    try {
+        process_video_vulkan(videoPath);
+    } 
+    catch (const exception& e) {
+        cerr << "Error: " << e.what() << endl;
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }

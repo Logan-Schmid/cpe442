@@ -3,7 +3,7 @@ CXX = g++
 CXXFLAGS = -std=c++17 -Wall -O3 $(shell pkg-config --cflags opencv4)
 
 # Libraries to link: OpenCV, Vulkan, and Kompute
-LDFLAGS = $(shell pkg-config --libs opencv4) -lvulkan -lkompute
+LDFLAGS = $(shell pkg-config --libs opencv4) -lkompute -lvulkan
 
 # Project files
 TARGET = edge_detector_final
@@ -11,7 +11,7 @@ SRCS = edge_detector_final.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 # Shader files
-SHADERS = grayscale.comp sobel.comp
+SHADERS = edge_detector.comp
 SPVS = $(SHADERS:.comp=.spv)
 
 # Default target: Compile shaders first, then the C++ program
