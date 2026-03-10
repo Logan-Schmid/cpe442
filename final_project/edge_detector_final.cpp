@@ -65,10 +65,11 @@ void process_video_vulkan(const string& videoPath) {
     vector<uint32_t> spirv = load_spirv("edge_detector.spv");
 
     // 5. Build Algorithm and Sequence
-    auto algorithm = mgr.algorithm(params, spirv);
-    
-    // We only dispatch enough workgroups to cover the smaller OUTPUT image
+    // A. Define the workgroups FIRST
     kp::Workgroup workgroups = { (uint32_t)ceil(outWidth / 16.0), (uint32_t)ceil(outHeight / 16.0), 1 };
+
+    // B. Pass the workgroups INTO the algorithm initialization
+    auto algorithm = mgr.algorithm(params, spirv, workgroups);
 
     // Sync dimensions to the GPU once
     mgr.sequence()->record<kp::OpTensorSyncDevice>({tensorDims})->eval();
@@ -76,7 +77,8 @@ void process_video_vulkan(const string& videoPath) {
     // Pre-record the processing loop sequence
     auto seq = mgr.sequence();
     seq->record<kp::OpTensorSyncDevice>({tensorIn})
-       ->record<kp::OpAlgoDispatch>(algorithm, workgroups)
+       // C. The workgroup is now baked into the algorithm, so OpAlgoDispatch only needs the algorithm
+       ->record<kp::OpAlgoDispatch>(algorithm) 
        ->record<kp::OpTensorSyncLocal>({tensorSobel});
 
     // 6. Processing Loop
