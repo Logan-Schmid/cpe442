@@ -53,23 +53,26 @@ void process_video_vulkan(const string& videoPath) {
     kp::Manager mgr; 
 
     // 3. Create Tensors
-    // Initialize host vectors with zeros to allocate the correct amount of space
-    vector<uint32_t> inBuffer(width * height, 0);
-    auto tensorIn = mgr.tensorT<uint32_t>(inBuffer);
-    
-    // The output tensor is strictly sized to the new, smaller dimensions
-    vector<float> outBuffer(outWidth * outHeight, 0.0f);
-    auto tensorSobel = mgr.tensorT<float>(outBuffer);
-    
-    // We pass the INPUT dimensions to the shader
+    // Use host-visible + coherent device memory on Pi to reduce staging overhead.
+    constexpr int kBufferCount = 2;
+    vector<uint32_t> inInit(width * height, 0);
+    vector<float> outInit(outWidth * outHeight, 0.0f);
     vector<uint32_t> dims = { width, height };
-    auto tensorDims = mgr.tensorT<uint32_t>(dims);
 
-    // Group them for the algorithm (explicit Memory upcast for Kompute API compatibility)
-    auto memIn = static_pointer_cast<kp::Memory>(tensorIn);
-    auto memSobel = static_pointer_cast<kp::Memory>(tensorSobel);
+    auto tensorDims = mgr.tensorT<uint32_t>(
+        dims, kp::Memory::MemoryTypes::eDeviceAndHost);
     auto memDims = static_pointer_cast<kp::Memory>(tensorDims);
-    vector<shared_ptr<kp::Memory>> params = {memIn, memSobel, memDims};
+
+    vector<shared_ptr<kp::TensorT<uint32_t>>> tensorInSlots;
+    vector<shared_ptr<kp::TensorT<float>>> tensorSobelSlots;
+    vector<shared_ptr<kp::Algorithm>> algorithmSlots;
+    vector<shared_ptr<kp::Sequence>> sequenceSlots;
+    vector<bool> slotInFlight(kBufferCount, false);
+
+    tensorInSlots.reserve(kBufferCount);
+    tensorSobelSlots.reserve(kBufferCount);
+    algorithmSlots.reserve(kBufferCount);
+    sequenceSlots.reserve(kBufferCount);
 
     // 4. Load Compiled Shader
     vector<uint32_t> spirv = load_spirv("edge_detector.spv");
@@ -78,21 +81,35 @@ void process_video_vulkan(const string& videoPath) {
     // A. Define the workgroups FIRST
     kp::Workgroup workgroups = { (outWidth + 15) / 16, (outHeight + 15) / 16, 1 };
 
-    // B. Pass the workgroups INTO the algorithm initialization
-    auto algorithm = mgr.algorithm(params, spirv, workgroups, std::vector<float>(), std::vector<float>());
-
     // Sync dimensions to the GPU once
     vector<shared_ptr<kp::Memory>> dimParam = {memDims};
     mgr.sequence()->record<kp::OpSyncDevice>(dimParam)->eval();
 
-    // Pre-record the processing loop sequence
-    auto seq = mgr.sequence();
-    vector<shared_ptr<kp::Memory>> inParam = {memIn};
-    vector<shared_ptr<kp::Memory>> outParam = {memSobel};
-    seq->record<kp::OpSyncDevice>(inParam)
-       // C. The workgroup is now baked into the algorithm, so OpAlgoDispatch only needs the algorithm
-       ->record<kp::OpAlgoDispatch>(algorithm) 
-       ->record<kp::OpSyncLocal>(outParam);
+    // Build double-buffered algorithms/sequences for async overlap
+    for (int i = 0; i < kBufferCount; ++i) {
+        auto tensorIn = mgr.tensorT<uint32_t>(
+            inInit, kp::Memory::MemoryTypes::eDeviceAndHost);
+        auto tensorSobel = mgr.tensorT<float>(
+            outInit, kp::Memory::MemoryTypes::eDeviceAndHost);
+        auto memIn = static_pointer_cast<kp::Memory>(tensorIn);
+        auto memSobel = static_pointer_cast<kp::Memory>(tensorSobel);
+        vector<shared_ptr<kp::Memory>> params = {memIn, memSobel, memDims};
+
+        auto algorithm = mgr.algorithm(
+            params, spirv, workgroups, std::vector<float>(), std::vector<float>());
+
+        auto seq = mgr.sequence();
+        vector<shared_ptr<kp::Memory>> inParam = {memIn};
+        vector<shared_ptr<kp::Memory>> outParam = {memSobel};
+        seq->record<kp::OpSyncDevice>(inParam)
+           ->record<kp::OpAlgoDispatch>(algorithm)
+           ->record<kp::OpSyncLocal>(outParam);
+
+        tensorInSlots.push_back(tensorIn);
+        tensorSobelSlots.push_back(tensorSobel);
+        algorithmSlots.push_back(algorithm);
+        sequenceSlots.push_back(seq);
+    }
 
     // 6. Processing Loop
     Mat frame = firstFrame;
@@ -102,13 +119,24 @@ void process_video_vulkan(const string& videoPath) {
     // FPS Tracking Variables
     int64 streamStart = getTickCount();
     int totalFramesProcessed = 0;
-    int64 timerStart = getTickCount();
-    int framesProcessed = 0;
-    double currentFps = 0.0;
+    const size_t inputBytes = static_cast<size_t>(width) * height * sizeof(uint32_t);
 
     while (true) {
         if (frame.cols != static_cast<int>(width) || frame.rows != static_cast<int>(height)) {
             throw runtime_error("Error: Frame resolution changed during processing.");
+        }
+
+        const int slot = totalFramesProcessed % kBufferCount;
+        if (slotInFlight[slot]) {
+            sequenceSlots[slot]->evalAwait();
+            slotInFlight[slot] = false;
+
+            Mat result(outHeight, outWidth, CV_32FC1, tensorSobelSlots[slot]->data());
+            imshow("GPU Processed Video (Unpadded)", result);
+            char key = static_cast<char>(waitKey(1));
+            if (key == 27 || key == 'q') {
+                break;
+            }
         }
 
         // Convert to RGBA
@@ -117,40 +145,29 @@ void process_video_vulkan(const string& videoPath) {
             inputRGBA = inputRGBA.clone();
         }
 
-        // Copy the full input frame into tensorIn
-        const size_t inputBytes = inBuffer.size() * sizeof(uint32_t);
-        memcpy(tensorIn->data(), inputRGBA.data, inputBytes);
+        // Copy this frame into the selected slot, then launch async GPU work.
+        memcpy(tensorInSlots[slot]->data(), inputRGBA.data, inputBytes);
+        sequenceSlots[slot]->evalAsync();
+        slotInFlight[slot] = true;
 
-        // Execute GPU workload
-        seq->eval();
-
-        // Wrap the output tensor data in a Mat sized exactly to outWidth and outHeight
-        Mat result(outHeight, outWidth, CV_32FC1, tensorSobel->data());
-
-        // FPS Calculation and Overlay
         totalFramesProcessed++;
-        framesProcessed++;
-        double timeElapsed = (getTickCount() - timerStart) / getTickFrequency();
-        
-        // Update the FPS counter every 1.0 seconds
-        if (timeElapsed >= 1.0) {
-            currentFps = framesProcessed / timeElapsed;
-            framesProcessed = 0;
-            timerStart = getTickCount();
-        }
-        
-        // Draw the FPS on the top-left corner of the frame
-        // Using Scalar(1.0) because our image pixels are floats from 0.0 to 1.0
-        string fpsText = "FPS: " + to_string((int)currentFps);
-        putText(result, fpsText, Point(10, 30), FONT_HERSHEY_SIMPLEX, 1.0, Scalar(1.0), 2);
-
-        imshow("GPU Processed Video (Unpadded)", result);
-
-        char key = (char)waitKey(1);
-        if (key == 27 || key == 'q') break;
 
         cap >> frame;
         if (frame.empty()) break; 
+    }
+
+    for (int i = 0; i < kBufferCount; ++i) {
+        if (slotInFlight[i]) {
+            sequenceSlots[i]->evalAwait();
+            slotInFlight[i] = false;
+
+            Mat result(outHeight, outWidth, CV_32FC1, tensorSobelSlots[i]->data());
+            imshow("GPU Processed Video (Unpadded)", result);
+            char key = static_cast<char>(waitKey(1));
+            if (key == 27 || key == 'q') {
+                break;
+            }
+        }
     }
 
     double totalElapsed = (getTickCount() - streamStart) / getTickFrequency();
