@@ -81,6 +81,11 @@ void process_video_vulkan(const string& videoPath) {
     Mat inputRGBA;
     cout << "Press 'ESC' or 'q' to exit..." << endl;
 
+    // FPS Tracking Variables
+    int64 timerStart = getTickCount();
+    int framesProcessed = 0;
+    double currentFps = 0.0;
+
     while (true) {
         // Convert to RGBA
         cvtColor(frame, inputRGBA, COLOR_BGR2RGBA);
@@ -93,7 +98,23 @@ void process_video_vulkan(const string& videoPath) {
 
         // Wrap the output tensor data in a Mat sized exactly to outWidth and outHeight
         Mat result(outHeight, outWidth, CV_32FC1, tensorSobel->data());
+
+        // FPS Calculation and Overlay
+        framesProcessed++;
+        double timeElapsed = (getTickCount() - timerStart) / getTickFrequency();
         
+        // Update the FPS counter every 1.0 seconds
+        if (timeElapsed >= 1.0) {
+            currentFps = framesProcessed / timeElapsed;
+            framesProcessed = 0;
+            timerStart = getTickCount();
+        }
+        
+        // Draw the FPS on the top-left corner of the frame
+        // Using Scalar(1.0) because our image pixels are floats from 0.0 to 1.0
+        string fpsText = "FPS: " + to_string((int)currentFps);
+        putText(result, fpsText, Point(10, 30), FONT_HERSHEY_SIMPLEX, 1.0, Scalar(1.0), 2);
+
         imshow("GPU Processed Video (Unpadded)", result);
 
         char key = (char)waitKey(1);
