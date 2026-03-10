@@ -100,6 +100,8 @@ void process_video_vulkan(const string& videoPath) {
     cout << "Press 'ESC' or 'q' to exit..." << endl;
 
     // FPS Tracking Variables
+    int64 streamStart = getTickCount();
+    int totalFramesProcessed = 0;
     int64 timerStart = getTickCount();
     int framesProcessed = 0;
     double currentFps = 0.0;
@@ -126,6 +128,7 @@ void process_video_vulkan(const string& videoPath) {
         Mat result(outHeight, outWidth, CV_32FC1, tensorSobel->data());
 
         // FPS Calculation and Overlay
+        totalFramesProcessed++;
         framesProcessed++;
         double timeElapsed = (getTickCount() - timerStart) / getTickFrequency();
         
@@ -148,6 +151,12 @@ void process_video_vulkan(const string& videoPath) {
 
         cap >> frame;
         if (frame.empty()) break; 
+    }
+
+    double totalElapsed = (getTickCount() - streamStart) / getTickFrequency();
+    if (totalElapsed > 0.0) {
+        double averageFps = totalFramesProcessed / totalElapsed;
+        cout << "Average FPS: " << averageFps << endl;
     }
 
     cap.release();
