@@ -27,7 +27,7 @@ LDFLAGS = $(shell pkg-config --libs opencv4) $(KOMPUTE_LIBS) $(FMT_LIBS) $(GLFW_
 
 # Project files
 TARGET = edge_detector_final
-SRCS = edge_detector_final.cpp kompute_logger_shim.cpp
+SRCS = edge_detector_final.cpp vulkan_display.cpp kompute_logger_shim.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 # Shader files
