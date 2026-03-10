@@ -3,6 +3,9 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include <cstring>
+#include <memory>
+#include <stdexcept>
 
 using namespace cv;
 using namespace std;
@@ -34,6 +37,10 @@ void process_video_vulkan(const string& videoPath) {
     // 1. Calculate Input vs Output Dimensions
     uint32_t width = firstFrame.cols;
     uint32_t height = firstFrame.rows;
+
+    if (width < 3 || height < 3) {
+        throw runtime_error("Error: Input frame must be at least 3x3 for Sobel.");
+    }
     
     // Unpadded (Valid) convolution shrinks the output by 1 pixel on every side (2 pixels total)
     uint32_t outWidth = width - 2;
@@ -58,28 +65,34 @@ void process_video_vulkan(const string& videoPath) {
     vector<uint32_t> dims = { width, height };
     auto tensorDims = mgr.tensorT<uint32_t>(dims);
 
-    // Group them for the algorithm (TensorT safely upcasts to Tensor)
-    vector<shared_ptr<kp::Tensor>> params = {tensorIn, tensorSobel, tensorDims};
+    // Group them for the algorithm (explicit Memory upcast for Kompute API compatibility)
+    auto memIn = static_pointer_cast<kp::Memory>(tensorIn);
+    auto memSobel = static_pointer_cast<kp::Memory>(tensorSobel);
+    auto memDims = static_pointer_cast<kp::Memory>(tensorDims);
+    vector<shared_ptr<kp::Memory>> params = {memIn, memSobel, memDims};
 
     // 4. Load Compiled Shader
     vector<uint32_t> spirv = load_spirv("edge_detector.spv");
 
     // 5. Build Algorithm and Sequence
     // A. Define the workgroups FIRST
-    kp::Workgroup workgroups = { (uint32_t)ceil(outWidth / 16.0), (uint32_t)ceil(outHeight / 16.0), 1 };
+    kp::Workgroup workgroups = { (outWidth + 15) / 16, (outHeight + 15) / 16, 1 };
 
     // B. Pass the workgroups INTO the algorithm initialization
     auto algorithm = mgr.algorithm(params, spirv, workgroups, std::vector<float>(), std::vector<float>());
 
     // Sync dimensions to the GPU once
-    mgr.sequence()->record<kp::OpTensorSyncDevice>({tensorDims})->eval();
+    vector<shared_ptr<kp::Memory>> dimParam = {memDims};
+    mgr.sequence()->record<kp::OpSyncDevice>(dimParam)->eval();
 
     // Pre-record the processing loop sequence
     auto seq = mgr.sequence();
-    seq->record<kp::OpTensorSyncDevice>({tensorIn})
+    vector<shared_ptr<kp::Memory>> inParam = {memIn};
+    vector<shared_ptr<kp::Memory>> outParam = {memSobel};
+    seq->record<kp::OpSyncDevice>(inParam)
        // C. The workgroup is now baked into the algorithm, so OpAlgoDispatch only needs the algorithm
        ->record<kp::OpAlgoDispatch>(algorithm) 
-       ->record<kp::OpTensorSyncLocal>({tensorSobel});
+       ->record<kp::OpSyncLocal>(outParam);
 
     // 6. Processing Loop
     Mat frame = firstFrame;
@@ -92,11 +105,19 @@ void process_video_vulkan(const string& videoPath) {
     double currentFps = 0.0;
 
     while (true) {
+        if (frame.cols != static_cast<int>(width) || frame.rows != static_cast<int>(height)) {
+            throw runtime_error("Error: Frame resolution changed during processing.");
+        }
+
         // Convert to RGBA
         cvtColor(frame, inputRGBA, COLOR_BGR2RGBA);
+        if (!inputRGBA.isContinuous()) {
+            inputRGBA = inputRGBA.clone();
+        }
 
         // Copy the full input frame into tensorIn
-        memcpy(tensorIn->data(), inputRGBA.data, width * height * 4);
+        const size_t inputBytes = inBuffer.size() * sizeof(uint32_t);
+        memcpy(tensorIn->data(), inputRGBA.data, inputBytes);
 
         // Execute GPU workload
         seq->eval();
@@ -138,10 +159,10 @@ int main(int argc, char** argv) {
     if (argc == 2) {
         videoPath = argv[1];
     }
-    else {
-        cerr << "Incorrect usage - use via: 'edge_detector_final [video_path]" << endl;
+    else if (argc > 2) {
+        cerr << "Incorrect usage - use: edge_detector_final [video_path]" << endl;
         return EXIT_FAILURE;
-    }        
+    }
 
     try {
         process_video_vulkan(videoPath);
