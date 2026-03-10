@@ -69,7 +69,7 @@ void process_video_vulkan(const string& videoPath) {
     kp::Workgroup workgroups = { (uint32_t)ceil(outWidth / 16.0), (uint32_t)ceil(outHeight / 16.0), 1 };
 
     // B. Pass the workgroups INTO the algorithm initialization
-    auto algorithm = mgr.algorithm(params, spirv, workgroups);
+    auto algorithm = mgr.algorithm(params, spirv, workgroups, std::vector<float>(), std::vector<float>());
 
     // Sync dimensions to the GPU once
     mgr.sequence()->record<kp::OpTensorSyncDevice>({tensorDims})->eval();
