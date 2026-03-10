@@ -1,13 +1,27 @@
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -O3 $(shell pkg-config --cflags opencv4)
 
-# Libraries to link: OpenCV, Vulkan, and Kompute
-LDFLAGS = $(shell pkg-config --libs opencv4) -lkompute -lvulkan
+# Prefer pkg-config metadata for Kompute; fallback to direct libs.
+KOMPUTE_CFLAGS = $(shell pkg-config --cflags kompute 2>/dev/null)
+KOMPUTE_LIBS = $(shell pkg-config --libs --static kompute 2>/dev/null)
+ifeq ($(strip $(KOMPUTE_LIBS)),)
+KOMPUTE_LIBS = -lkompute -lvulkan
+endif
+
+# Kompute static installs may require explicit fmt linkage.
+FMT_LIBS = $(shell pkg-config --libs fmt 2>/dev/null)
+ifeq ($(strip $(FMT_LIBS)),)
+FMT_LIBS = -lfmt
+endif
+
+CXXFLAGS = -std=c++17 -Wall -O3 $(shell pkg-config --cflags opencv4) $(KOMPUTE_CFLAGS)
+
+# Libraries to link: OpenCV + Kompute stack
+LDFLAGS = $(shell pkg-config --libs opencv4) $(KOMPUTE_LIBS) $(FMT_LIBS)
 
 # Project files
 TARGET = edge_detector_final
-SRCS = edge_detector_final.cpp
+SRCS = edge_detector_final.cpp kompute_logger_shim.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 # Shader files
