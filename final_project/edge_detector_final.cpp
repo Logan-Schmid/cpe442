@@ -126,6 +126,12 @@ void process_video_vulkan(const string& videoPath) {
             throw runtime_error("Error: Frame resolution changed during processing.");
         }
 
+        // Convert to RGBA first so CPU work overlaps with prior GPU work.
+        cvtColor(frame, inputRGBA, COLOR_BGR2RGBA);
+        if (!inputRGBA.isContinuous()) {
+            inputRGBA = inputRGBA.clone();
+        }
+
         const int slot = totalFramesProcessed % kBufferCount;
         if (slotInFlight[slot]) {
             sequenceSlots[slot]->evalAwait();
@@ -137,12 +143,6 @@ void process_video_vulkan(const string& videoPath) {
             if (key == 27 || key == 'q') {
                 break;
             }
-        }
-
-        // Convert to RGBA
-        cvtColor(frame, inputRGBA, COLOR_BGR2RGBA);
-        if (!inputRGBA.isContinuous()) {
-            inputRGBA = inputRGBA.clone();
         }
 
         // Copy this frame into the selected slot, then launch async GPU work.

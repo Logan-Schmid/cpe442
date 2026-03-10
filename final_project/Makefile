@@ -44,7 +44,7 @@ shaders: $(SPVS)
 
 # Rule to compile .comp files into .spv using glslc
 %.spv: %.comp
-	glslc $< -o $@
+	glslc -O $< -o $@
 
 # Cleanup build artifacts
 clean:
