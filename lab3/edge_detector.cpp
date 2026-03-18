@@ -12,13 +12,15 @@
 #include <iostream>
 #include "processing.hpp"
 #include <filesystem>
+#include <chrono>
 
 using namespace cv;
 using namespace std;
 namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {
-    if (argc != 3) {
+   auto start = chrono::high_resolution_clock::now();
+	if (argc != 3) {
         cerr << "Incorrect usage - use via: 'edge_detector [video_path] [sobel_option = {\"442\"/\"cv\"}]" << endl;
         return -1;
     }
@@ -105,5 +107,11 @@ int main(int argc, char** argv) {
     cap.release();
     writer.release();
     destroyAllWindows();
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    float duration_secs = (float)duration.count()/1000;
+    cout << "Averate FPS: " << frame_count / duration_secs << endl;
+
     return 0;
 }
