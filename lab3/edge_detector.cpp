@@ -11,9 +11,11 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include "processing.hpp"
+#include <filesystem>
 
 using namespace cv;
 using namespace std;
+namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {
     if (argc != 3) {
@@ -23,6 +25,9 @@ int main(int argc, char** argv) {
 
     string cap_path = argv[1];
     string sobel_option = argv[2];
+
+    fs::path input_path(cap_path);
+    string base_name = input_path.filename().string();
 
     // Initialize video reader
     VideoCapture cap(cap_path);
@@ -45,10 +50,10 @@ int main(int argc, char** argv) {
     string out_filename;
     Size out_size;
     if (sobel_option == "442") {
-        out_filename = "442_sobel_" + cap_path;
+        out_filename = "442_sobel_" + base_name;
         out_size = Size(width-2, height-2);
     } else {
-        out_filename = "cv_sobel_" + cap_path;
+        out_filename = "cv_sobel_" + base_name;
         out_size = Size(width, height);
     }
     int codec = VideoWriter::fourcc('m', 'p', '4', 'v');

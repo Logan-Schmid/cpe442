@@ -1,3 +1,9 @@
+#include <string>
+#include <memory>
+#include <iostream>
+#include <vector>
+#include <cstdint>
+#include <kompute/Kompute.hpp>
 
 void kompute(const std::string& shader) {
 
