@@ -1,7 +1,7 @@
 .vscode
 *.o
 *.s
-.mp4
+*.mp4
 edge_detector
 edge_detector_threads
 edge_detector_vec_instr
