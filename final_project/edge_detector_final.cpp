@@ -30,12 +30,7 @@ vector<uint32_t> load_spirv(const string& filename)
 void process_video_vulkan(const string& videoPath)
 {
     VideoCapture cap;
-    if (videoPath == "0") {
-        cap.open(0);
-    }
-    else {
-        cap.open(videoPath);
-    }
+    cap.open(videoPath);
 
     if (!cap.isOpened()) {
         throw runtime_error("Error: Could not open video.");
@@ -54,7 +49,7 @@ void process_video_vulkan(const string& videoPath)
         throw runtime_error("Error: Input frame must be at least 3x3 for Sobel.");
     }
 
-    const uint32_t outWidth = width - 2;
+    const uint32_t outWidth = width - 2; // maybe just change this so the display window is the same size, just with the outer border being all zeroes
     const uint32_t outHeight = height - 2;
 
     cout << "Video initialized. Input: " << width << "x" << height
