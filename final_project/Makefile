@@ -1,37 +1,17 @@
 # Compiler and flags
 CXX = g++
+CXXFLAGS = -std=c++17 -Wall -O3 $(shell pkg-config --cflags opencv4)
 
-# Prefer pkg-config metadata for Kompute; fallback to direct libs.
-KOMPUTE_CFLAGS = $(shell pkg-config --cflags kompute 2>/dev/null)
-KOMPUTE_LIBS = $(shell pkg-config --libs --static kompute 2>/dev/null)
-ifeq ($(strip $(KOMPUTE_LIBS)),)
-KOMPUTE_LIBS = -lkompute -lvulkan
-endif
-
-# Kompute static installs may require explicit fmt linkage.
-FMT_LIBS = $(shell pkg-config --libs fmt 2>/dev/null)
-ifeq ($(strip $(FMT_LIBS)),)
-FMT_LIBS = -lfmt
-endif
-
-GLFW_CFLAGS = $(shell pkg-config --cflags glfw3 2>/dev/null)
-GLFW_LIBS = $(shell pkg-config --libs glfw3 2>/dev/null)
-ifeq ($(strip $(GLFW_LIBS)),)
-GLFW_LIBS = -lglfw
-endif
-
-CXXFLAGS = -std=c++17 -Wall -O3 $(shell pkg-config --cflags opencv4) $(KOMPUTE_CFLAGS) $(GLFW_CFLAGS)
-
-# Libraries to link: OpenCV + Kompute stack
-LDFLAGS = $(shell pkg-config --libs opencv4) $(KOMPUTE_LIBS) $(FMT_LIBS) $(GLFW_LIBS)
+# Libraries to link: OpenCV + Vulkan/Kompute
+LDFLAGS = $(shell pkg-config --libs opencv4) -lkompute -lvulkan
 
 # Project files
-TARGET = edge_detector_final
-SRCS = edge_detector_final.cpp vulkan_display.cpp kompute_logger_shim.cpp
+TARGET = gpu_edge_detector
+SRCS = main.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 # Shader files
-SHADERS = edge_detector.comp
+SHADERS = grayscale.comp sobel.comp
 SPVS = $(SHADERS:.comp=.spv)
 
 # Default target: Compile shaders first, then the C++ program
@@ -48,7 +28,7 @@ $(TARGET): $(OBJS)
 # Target to compile all GLSL shaders
 shaders: $(SPVS)
 
-# Rule to compile .comp files into .spv using glslc
+# Rule to compile .comp files into .spv using glslc (with -O for optimization)
 %.spv: %.comp
 	glslc -O $< -o $@
 
