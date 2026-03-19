@@ -90,33 +90,65 @@ void process_video_vulkan(const string& videoPath) {
 
     int frame_count = 0;
     // 7. The Main Video Loop
-    while (frame_count < total_frames) {
+    while (frame_count < total_frames-2) {
+        cout << "\rProcessing frame " << frame_count + 1 << " / " << safe_frames << flush;
+        
         cap.read(cpuFrame);
-        if (cpuFrame.empty()) break;
+        if (cpuFrame.empty()) {
+            cout << "\nWarning: Hit actual EOF on frame " << frame_count << endl;
+            break; 
+        }
 
-        // Convert the BGR camera frame to RGBA, writing it directly into the GPU's memory space
-        cvtColor(cpuFrame, gpuMappedRGBA, COLOR_BGR2RGBA);
-
-        // Tell the GPU to execute the pre-recorded sequence (Gray -> Sobel)
+        cv::cvtColor(cpuFrame, gpuMappedRGBA, cv::COLOR_BGR2RGBA);
         sequence->eval();
-
-        // The result is instantly available in gpuMappedSobel
-        imshow("GPU Accelerated Sobel", gpuMappedSobel);
-	    frame_count++;
-        if (cv::waitKey(1) == 27) break; // ESC key
+        cv::imshow("GPU Accelerated Sobel", gpuMappedSobel);
+        
+        frame_count++; 
+        if (cv::waitKey(1) == 27) break; 
     }
-    
-    cout << "Loop finished. Calculating FPS..." << endl;
-    auto stop = chrono::high_resolution_clock::now();
-    auto duration = chrono::duration_cast<chrono::milliseconds>(stop - start);
-    float duration_secs = (float)duration.count()/1000;
-    cout << "Averate FPS: " << frame_count / duration_secs << endl;
 
-    cout << "Destroying window..." << endl;
-    cap.release();
-    cout << "Destroying window..." << endl;
-    destroyAllWindows();
-	waitKey(1);
+    // Now we trace exactly how long the teardown takes
+    cout << "\nLoop broken. Getting clock time..." << endl;
+    auto stop = std::chrono::high_resolution_clock::now();
+    
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    float duration_secs = (float)duration.count() / 1000.0f;
+    cout << "Average FPS: " << frame_count / duration_secs << endl;
+
+    cout << "Executing cap.release()..." << endl;
+    cap.release(); 
+    
+    cout << "Executing destroyAllWindows()..." << endl;
+    cv::destroyAllWindows();
+    cv::waitKey(10); // Bumped to 10ms to give GTK more breathing room
+
+    cout << "Program complete." << endl;
+    //     cap.read(cpuFrame);
+    //     if (cpuFrame.empty()) break;
+
+    //     // Convert the BGR camera frame to RGBA, writing it directly into the GPU's memory space
+    //     cvtColor(cpuFrame, gpuMappedRGBA, COLOR_BGR2RGBA);
+
+    //     // Tell the GPU to execute the pre-recorded sequence (Gray -> Sobel)
+    //     sequence->eval();
+
+    //     // The result is instantly available in gpuMappedSobel
+    //     imshow("GPU Accelerated Sobel", gpuMappedSobel);
+	//     frame_count++;
+    //     if (cv::waitKey(1) == 27) break; // ESC key
+    // }
+    
+    // cout << "Loop finished. Calculating FPS..." << endl;
+    // auto stop = chrono::high_resolution_clock::now();
+    // auto duration = chrono::duration_cast<chrono::milliseconds>(stop - start);
+    // float duration_secs = (float)duration.count()/1000;
+    // cout << "Averate FPS: " << frame_count / duration_secs << endl;
+
+    // cout << "Destroying window..." << endl;
+    // cap.release();
+    // cout << "Destroying window..." << endl;
+    // destroyAllWindows();
+	// waitKey(1);
 }
 
 int main(int argc, char** argv)
