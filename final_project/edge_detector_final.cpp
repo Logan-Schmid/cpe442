@@ -39,9 +39,9 @@ void process_video_vulkan(const string& videoPath) {
 
     // Create the Dimensions Tensor (NEW)
     // We sync this to the device immediately since it never changes
-    std::vector<uint32_t> dims = { (uint32_t)width, (uint32_t)height };
-    auto tensorDims = mgr.tensor(dims.data(), dims.size(), sizeof(uint32_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
-    mgr.sequence()->record<kp::OpTensorSyncDevice>({tensorDims})->eval();
+    vector<uint32_t> dims = { width, height };
+    auto tensorDims = mgr.tensor(dims);
+    mgr.sequence()->record<kp::OpSyncDevice>({tensorDims})->eval();
 
     // 3. Allocate Host-Visible Tensors (UPDATED FOR FLOATS)
     // tensorIn is still 4 bytes (RGBA bytes packed into uint32_t)
