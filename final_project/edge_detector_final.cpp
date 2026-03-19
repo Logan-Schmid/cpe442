@@ -1,25 +1,18 @@
 #include <opencv2/opencv.hpp>
 #include <kompute/Kompute.hpp>
-
-#include "vulkan_display.hpp"
-
-#include <cstring>
-#include <fstream>
 #include <iostream>
-#include <memory>
-#include <stdexcept>
 #include <vector>
+#include <fstream>
+#include <cmath>
+#include <chrono>
 
 using namespace cv;
 using namespace std;
 
 // Helper to load SPIR-V files
-vector<uint32_t> load_spirv(const string& filename)
-{
+vector<uint32_t> load_spirv(const string& filename) {
     ifstream file(filename, ios::binary | ios::ate);
-    if (!file.is_open()) {
-        throw runtime_error("Failed to open SPIR-V file: " + filename);
-    }
+    if (!file.is_open()) throw runtime_error("Failed to open SPIR-V file: " + filename);
     const size_t size = static_cast<size_t>(file.tellg());
     file.seekg(0, ios::beg);
     vector<uint32_t> buffer(size / sizeof(uint32_t));
@@ -27,133 +20,83 @@ vector<uint32_t> load_spirv(const string& filename)
     return buffer;
 }
 
-void process_video_vulkan(const string& videoPath)
-{
+void process_video_vulkan(const string& videoPath) {
+    auto start = chrono::high_resolution_clock::now();
+    // 1. Open video
     VideoCapture cap;
     cap.open(videoPath);
-
     if (!cap.isOpened()) {
         throw runtime_error("Error: Could not open video.");
     }
 
-    Mat firstFrame;
-    cap >> firstFrame;
-    if (firstFrame.empty()) {
-        throw runtime_error("Error: Video file is empty.");
-    }
+    const uint32_t width = static_cast<uint32_t>(cap.get(CAP_PROP_FRAME_WIDTH));
+    const uint32_t height = static_cast<uint32_t>(cap.get(CAP_PROP_FRAME_HEIGHT));
 
-    const uint32_t width = static_cast<uint32_t>(firstFrame.cols);
-    const uint32_t height = static_cast<uint32_t>(firstFrame.rows);
+    cout << "Video initialized. Input: " << width << "x" << height << endl;
+    
+    // 2. Initialize the Vulkan Compute Manager
+    kp::Manager mgr;
 
-    if (width < 3 || height < 3) {
-        throw runtime_error("Error: Input frame must be at least 3x3 for Sobel.");
-    }
+    // 3. Allocate Host-Visible GPU Memory
+    auto tensorIn = mgr.tensor(nullptr, width * height * 4, sizeof(uint8_t), kp::Tensor::TensorDataTypes::eUnsignedInt);  //need 4 channels (RGBA) for the frame input
+    auto tensorGray = mgr.tensor(nullptr, width * height, sizeof(uint8_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
+    auto tensorSobel = mgr.tensor(nullptr, width * height, sizeof(uint8_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
 
-    const uint32_t outWidth = width - 2; // maybe just change this so the display window is the same size, just with the outer border being all zeroes
-    const uint32_t outHeight = height - 2;
+    // 4. Wrap OpenCV Mats directly around the Kompute GPU memory (Zero-Copy)
+    Mat gpuMappedRGBA(height, width, CV_8UC4, tensorIn->data());
+    Mat gpuMappedSobel(height, width, CV_8UC1, tensorSobel->data());
 
-    cout << "Video initialized. Input: " << width << "x" << height
-         << " | Output: " << outWidth << "x" << outHeight << endl;
+    // 5. Load Shaders and Create Algorithms
+    auto graySpirv = load_spirv("grayscale.spv");
+    auto sobelSpirv = load_spirv("sobel.spv");
 
-    VulkanDisplay display(outWidth, outHeight);
+    auto algoGray = mgr.algorithm({tensorIn, tensorGray}, graySpirv);
+    auto algoSobel = mgr.algorithm({tensorGray, tensorSobel}, sobelSpirv);
 
-    // Use the same Vulkan objects for Kompute so compute output stays on the same GPU/device.
-    kp::Manager mgr(display.getInstance(), display.getPhysicalDevice(), display.getDevice());
+    // Calculate how many 16x16 workgroups are needed to cover the image
+    kp::Workgroup workgroups = { (uint32_t)ceil(width / 16.0), (uint32_t)ceil(height / 16.0), 1 };
 
-    vector<uint32_t> inInit(width * height, 0);
-    vector<uint32_t> outInit(outWidth * outHeight, 0);
-    vector<uint32_t> dims = { width, height };
+    // 6. Pre-record the execution sequence
+    auto sequence = mgr.sequence();
+    sequence->record<kp::OpAlgoDispatch>(algoGray, workgroups)   // Step A: Grayscale the whole frame
+            ->record<kp::OpAlgoDispatch>(algoSobel, workgroups); // Step B: Sobel the grayscale frame
 
-    auto tensorIn = mgr.tensorT<uint32_t>(inInit, kp::Memory::MemoryTypes::eDeviceAndHost);
-    auto tensorOut = mgr.tensorT<uint32_t>(outInit, kp::Memory::MemoryTypes::eDevice);
-    auto tensorDims = mgr.tensorT<uint32_t>(dims, kp::Memory::MemoryTypes::eDeviceAndHost);
+    Mat cpuFrame;
+    cout << "Starting GPU-accelerated video loop. Press ESC to exit.\n";
 
-    auto memIn = static_pointer_cast<kp::Memory>(tensorIn);
-    auto memOut = static_pointer_cast<kp::Memory>(tensorOut);
-    auto memDims = static_pointer_cast<kp::Memory>(tensorDims);
-
-    vector<shared_ptr<kp::Memory>> params = {memIn, memOut, memDims};
-
-    const vector<uint32_t> spirv = load_spirv("edge_detector.spv");
-    const kp::Workgroup workgroups = { (outWidth + 15) / 16, (outHeight + 15) / 16, 1 };
-
-    auto algorithm = mgr.algorithm(
-        params,
-        spirv,
-        workgroups,
-        vector<float>(),
-        vector<float>());
-
-    vector<shared_ptr<kp::Memory>> dimParam = {memDims};
-    mgr.sequence()->record<kp::OpSyncDevice>(dimParam)->eval();
-
-    auto seq = mgr.sequence();
-    vector<shared_ptr<kp::Memory>> inParam = {memIn};
-    seq->record<kp::OpSyncDevice>(inParam)
-       ->record<kp::OpAlgoDispatch>(algorithm);
-
-    auto outputBuffer = memOut->getPrimaryBuffer();
-    if (!outputBuffer) {
-        throw runtime_error("Failed to access output Vulkan buffer from Kompute tensor.");
-    }
-
-    Mat frame = firstFrame;
-    Mat inputRGBA;
-
-    cout << "Rendering with Vulkan swapchain. Close window or press Ctrl+C to exit." << endl;
-
-    const int64 streamStart = getTickCount();
-    int totalFramesProcessed = 0;
-    const size_t inputBytes = static_cast<size_t>(width) * height * sizeof(uint32_t);
-
+    // 7. The Main Video Loop
     while (true) {
-        display.pollEvents();
-        if (display.shouldClose()) {
-            break;
-        }
+        cap.read(cpuFrame);
+        if (cpuFrame.empty()) break;
 
-        if (frame.cols != static_cast<int>(width) || frame.rows != static_cast<int>(height)) {
-            throw runtime_error("Error: Frame resolution changed during processing.");
-        }
+        // Convert the BGR camera frame to RGBA, writing it directly into the GPU's memory space
+        cv::cvtColor(cpuFrame, gpuMappedRGBA, cv::COLOR_BGR2RGBA);
 
-        cvtColor(frame, inputRGBA, COLOR_BGR2RGBA);
-        if (!inputRGBA.isContinuous()) {
-            inputRGBA = inputRGBA.clone();
-        }
+        // Tell the GPU to execute the pre-recorded sequence (Gray -> Sobel)
+        sequence->eval();
 
-        memcpy(tensorIn->data(), inputRGBA.data, inputBytes);
+        // The result is instantly available in gpuMappedSobel
+        cv::imshow("GPU Accelerated Sobel", gpuMappedSobel);
 
-        // Compute completes on-GPU, then the same GPU buffer is copied into swapchain image.
-        seq->eval();
-        display.presentFromBuffer(*outputBuffer, outWidth, outHeight);
-
-        totalFramesProcessed++;
-
-        cap >> frame;
-        if (frame.empty()) {
-            break;
-        }
+        if (cv::waitKey(1) == 27) break; // ESC key
     }
 
-    const double totalElapsed = (getTickCount() - streamStart) / getTickFrequency();
-    if (totalElapsed > 0.0) {
-        const double averageFps = totalFramesProcessed / totalElapsed;
-        cout << "Average FPS: " << averageFps << endl;
-    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    float duration_secs = (float)duration.count()/1000;
+    cout << "Averate FPS: " << frame_count / duration_secs << endl;
 
     cap.release();
+    cv::destroyAllWindows();
 }
 
 int main(int argc, char** argv)
 {
-    string videoPath = "0";
-    if (argc == 2) {
-        videoPath = argv[1];
-    }
-    else if (argc > 2) {
+    if (argc != 2) {
         cerr << "Incorrect usage - use: edge_detector_final [video_path]" << endl;
         return EXIT_FAILURE;
     }
+    string videoPath = argv[1];
 
     try {
         process_video_vulkan(videoPath);
