@@ -37,21 +37,32 @@ void process_video_vulkan(const string& videoPath) {
     // 2. Initialize the Vulkan Compute Manager
     kp::Manager mgr;
 
-    // 3. Allocate Host-Visible GPU Memory
-    auto tensorIn = mgr.tensor(nullptr, width * height * 4, sizeof(uint8_t), kp::Tensor::TensorDataTypes::eUnsignedInt);  //need 4 channels (RGBA) for the frame input
-    auto tensorGray = mgr.tensor(nullptr, width * height, sizeof(uint8_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
-    auto tensorSobel = mgr.tensor(nullptr, width * height, sizeof(uint8_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
+    // Create the Dimensions Tensor (NEW)
+    // We sync this to the device immediately since it never changes
+    std::vector<uint32_t> dims = { (uint32_t)width, (uint32_t)height };
+    auto tensorDims = mgr.tensor(dims.data(), dims.size(), sizeof(uint32_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
+    mgr.sequence()->record<kp::OpTensorSyncDevice>({tensorDims})->eval();
 
-    // 4. Wrap OpenCV Mats directly around the Kompute GPU memory (Zero-Copy)
+    // 3. Allocate Host-Visible Tensors (UPDATED FOR FLOATS)
+    // tensorIn is still 4 bytes (RGBA bytes packed into uint32_t)
+    auto tensorIn = mgr.tensor(nullptr, width * height, sizeof(uint32_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
+    
+    // Gray and Sobel are now arrays of 32-bit FLOATS
+    auto tensorGray = mgr.tensor(nullptr, width * height, sizeof(float), kp::Tensor::TensorDataTypes::eFloat);
+    auto tensorSobel = mgr.tensor(nullptr, width * height, sizeof(float), kp::Tensor::TensorDataTypes::eFloat);
+
+    // 4. Wrap OpenCV Mats directly around the Kompute GPU memory (Zero-Copy) (UPDATED FOR FLOATS)
     Mat gpuMappedRGBA(height, width, CV_8UC4, tensorIn->data());
-    Mat gpuMappedSobel(height, width, CV_8UC1, tensorSobel->data());
+    
+    // Tell OpenCV the final output is a 32-bit float (CV_32FC1)
+    Mat gpuMappedSobel(height, width, CV_32FC1, tensorSobel->data());
 
     // 5. Load Shaders and Create Algorithms
     auto graySpirv = load_spirv("grayscale.spv");
     auto sobelSpirv = load_spirv("sobel.spv");
 
-    auto algoGray = mgr.algorithm({tensorIn, tensorGray}, graySpirv);
-    auto algoSobel = mgr.algorithm({tensorGray, tensorSobel}, sobelSpirv);
+    auto algoGray = mgr.algorithm({tensorIn, tensorGray, tensorDims}, graySpirv);
+    auto algoSobel = mgr.algorithm({tensorGray, tensorSobel, tensorDims}, sobelSpirv);
 
     // Calculate how many 16x16 workgroups are needed to cover the image
     kp::Workgroup workgroups = { (uint32_t)ceil(width / 16.0), (uint32_t)ceil(height / 16.0), 1 };
