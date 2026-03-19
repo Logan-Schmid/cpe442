@@ -108,7 +108,7 @@ void process_video_vulkan(const string& videoPath) {
     
     cout << "Loop finished. Calculating FPS..." << endl;
     auto stop = chrono::high_resolution_clock::now();
-    auto duration = hrono::duration_cast<chrono::milliseconds>(stop - start);
+    auto duration = chrono::duration_cast<chrono::milliseconds>(stop - start);
     float duration_secs = (float)duration.count()/1000;
     cout << "Averate FPS: " << frame_count / duration_secs << endl;
 
