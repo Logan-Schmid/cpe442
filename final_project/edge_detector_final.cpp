@@ -40,18 +40,23 @@ void process_video_vulkan(const string& videoPath) {
     // Create the Dimensions Tensor (NEW)
     // We sync this to the device immediately since it never changes
     vector<uint32_t> dims = { (uint32_t)width, (uint32_t)height };
-    auto tensorDims = mgr.tesnsorT<uint32_t>(dims);
+    auto tensorDims = mgr.tensorT<uint32_t>(dims);
     // Sync to device using OpSyncDevice
     vector<shared_ptr<kp::Memory>> syncDims = { tensorDims };
     mgr.sequence()->record<kp::OpSyncDevice>(syncDims)->eval();
 
     // 3. Allocate Host-Visible Tensors (UPDATED FOR FLOATS)
     // tensorIn is still 4 bytes (RGBA bytes packed into uint32_t)
-    auto tensorIn = mgr.tensor(nullptr, width * height, sizeof(uint32_t), kp::Tensor::TensorDataTypes::eUnsignedInt);
+    vector<uint32_t> inData(width * height, 0);
+    auto tensorIn = mgr.tensorT<uint32_t>(inData);
     
     // Gray and Sobel are now arrays of 32-bit FLOATS
-    auto tensorGray = mgr.tensor(nullptr, width * height, sizeof(float), kp::Tensor::TensorDataTypes::eFloat);
-    auto tensorSobel = mgr.tensor(nullptr, width * height, sizeof(float), kp::Tensor::TensorDataTypes::eFloat);
+    std::vector<float> grayData(width * height, 0.0f);
+    auto tensorGray = mgr.tensorT<float>(grayData);
+
+    std::vector<float> sobelData(width * height, 0.0f);
+    auto tensorSobel = mgr.tensorT<float>(sobelData);
+
 
     // 4. Wrap OpenCV Mats directly around the Kompute GPU memory (Zero-Copy) (UPDATED FOR FLOATS)
     Mat gpuMappedRGBA(height, width, CV_8UC4, tensorIn->data());
@@ -63,20 +68,27 @@ void process_video_vulkan(const string& videoPath) {
     auto graySpirv = load_spirv("grayscale.spv");
     auto sobelSpirv = load_spirv("sobel.spv");
 
-    auto algoGray = mgr.algorithm({tensorIn, tensorGray, tensorDims}, graySpirv);
-    auto algoSobel = mgr.algorithm({tensorGray, tensorSobel, tensorDims}, sobelSpirv);
-
-    // Calculate how many 16x16 workgroups are needed to cover the image
+// Calculate workgroups here so they can be passed into the algorithm
     kp::Workgroup workgroups = { (uint32_t)ceil(width / 16.0), (uint32_t)ceil(height / 16.0), 1 };
+
+    // Explicitly declare Memory vectors to satisfy the new template typings
+    vector<shared_ptr<kp::Memory>> paramsGray = {tensorIn, tensorGray, tensorDims};
+    auto algoGray = mgr.algorithm(paramsGray, graySpirv, workgroups);
+
+    vector<shared_ptr<kp::Memory>> paramsSobel = {tensorGray, tensorSobel, tensorDims};
+    auto algoSobel = mgr.algorithm(paramsSobel, sobelSpirv, workgroups);
 
     // 6. Pre-record the execution sequence
     auto sequence = mgr.sequence();
-    sequence->record<kp::OpAlgoDispatch>(algoGray, workgroups)   // Step A: Grayscale the whole frame
-            ->record<kp::OpAlgoDispatch>(algoSobel, workgroups); // Step B: Sobel the grayscale frame
+    sequence->record<kp::OpSyncDevice>({tensorIn})           // Step 1: Flush OpenCV frame to GPU
+            ->record<kp::OpAlgoDispatch>(algoGray)           // Step 2: Grayscale pass
+            ->record<kp::OpAlgoDispatch>(algoSobel)          // Step 3: Sobel pass
+            ->record<kp::OpSyncLocal>({tensorSobel});        // Step 4: Fetch result back to OpenCV
 
     Mat cpuFrame;
     cout << "Starting GPU-accelerated video loop. Press ESC to exit.\n";
 
+    int frame_count = 0;
     // 7. The Main Video Loop
     while (true) {
         cap.read(cpuFrame);
@@ -90,7 +102,7 @@ void process_video_vulkan(const string& videoPath) {
 
         // The result is instantly available in gpuMappedSobel
         cv::imshow("GPU Accelerated Sobel", gpuMappedSobel);
-
+	frame_count++;
         if (cv::waitKey(1) == 27) break; // ESC key
     }
 

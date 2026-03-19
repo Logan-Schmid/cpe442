@@ -2,12 +2,12 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -O3 $(shell pkg-config --cflags opencv4)
 
-# Libraries to link: OpenCV + Vulkan/Kompute
-LDFLAGS = $(shell pkg-config --libs opencv4) -lkompute -lvulkan
+# Libraries to link: OpenCV + Vulkan/Kompute + fmt
+LDFLAGS = $(shell pkg-config --libs opencv4) -lkompute -lvulkan -lfmt
 
 # Project files
 TARGET = edge_detector_final
-SRCS = edge_detector_final.cpp
+SRCS = edge_detector_final.cpp kompute_logger_shim.cpp
 OBJS = $(SRCS:.cpp=.o)
 
 # Shader files
