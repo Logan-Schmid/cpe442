@@ -116,6 +116,7 @@ void process_video_vulkan(const string& videoPath) {
     cap.release();
     cout << "Destroying window..." << endl;
     destroyAllWindows();
+	waitKey(1);
 }
 
 int main(int argc, char** argv)
