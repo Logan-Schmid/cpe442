@@ -89,8 +89,9 @@ void process_video_vulkan(const string& videoPath) {
     cout << "Starting GPU-accelerated video loop. Press ESC to exit.\n";
 
     int frame_count = 0;
+    int safe_frames = total_frames-2;
     // 7. The Main Video Loop
-    while (frame_count < total_frames-2) {
+    while (frame_count < safe_frames) {
         cout << "\rProcessing frame " << frame_count + 1 << " / " << safe_frames << flush;
         
         cap.read(cpuFrame);
