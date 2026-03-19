@@ -31,8 +31,8 @@ void process_video_vulkan(const string& videoPath) {
 
     const uint32_t width = static_cast<uint32_t>(cap.get(CAP_PROP_FRAME_WIDTH));
     const uint32_t height = static_cast<uint32_t>(cap.get(CAP_PROP_FRAME_HEIGHT));
-
-    cout << "Video initialized. Input: " << width << "x" << height << endl;
+    int total_frames = static_cast<int>(cap.get(CAP_PROP_FRAME_COUNT));
+    cout << "Video initialized. Input: " << width << "x" << height << " | Total Frames: " << total_frames << endl;
     
     // 2. Initialize the Vulkan Compute Manager
     kp::Manager mgr;
@@ -51,10 +51,10 @@ void process_video_vulkan(const string& videoPath) {
     auto tensorIn = mgr.tensorT<uint32_t>(inData);
     
     // Gray and Sobel are now arrays of 32-bit FLOATS
-    std::vector<float> grayData(width * height, 0.0f);
+    vector<float> grayData(width * height, 0.0f);
     auto tensorGray = mgr.tensorT<float>(grayData);
 
-    std::vector<float> sobelData(width * height, 0.0f);
+    vector<float> sobelData(width * height, 0.0f);
     auto tensorSobel = mgr.tensorT<float>(sobelData);
 
 
@@ -90,29 +90,32 @@ void process_video_vulkan(const string& videoPath) {
 
     int frame_count = 0;
     // 7. The Main Video Loop
-    while (true) {
+    while (frame_count < total_frames) {
         cap.read(cpuFrame);
         if (cpuFrame.empty()) break;
 
         // Convert the BGR camera frame to RGBA, writing it directly into the GPU's memory space
-        cv::cvtColor(cpuFrame, gpuMappedRGBA, cv::COLOR_BGR2RGBA);
+        cvtColor(cpuFrame, gpuMappedRGBA, COLOR_BGR2RGBA);
 
         // Tell the GPU to execute the pre-recorded sequence (Gray -> Sobel)
         sequence->eval();
 
         // The result is instantly available in gpuMappedSobel
-        cv::imshow("GPU Accelerated Sobel", gpuMappedSobel);
-	frame_count++;
+        imshow("GPU Accelerated Sobel", gpuMappedSobel);
+	    frame_count++;
         if (cv::waitKey(1) == 27) break; // ESC key
     }
-
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    
+    cout << "Loop finished. Calculating FPS..." << endl;
+    auto stop = chrono::high_resolution_clock::now();
+    auto duration = hrono::duration_cast<chrono::milliseconds>(stop - start);
     float duration_secs = (float)duration.count()/1000;
     cout << "Averate FPS: " << frame_count / duration_secs << endl;
 
+    cout << "Destroying window..." << endl;
     cap.release();
-    cv::destroyAllWindows();
+    cout << "Destroying window..." << endl;
+    destroyAllWindows();
 }
 
 int main(int argc, char** argv)
